@@ -13,9 +13,12 @@ ENV/
 env/
 
 # Project Telemetry & Uploads
-data/logs/
-data/uploads/
-data/models/
+data/logs/*
+!data/logs/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
+data/models/*
+!data/models/.gitkeep
 
 # System and IDE
 .idea/
