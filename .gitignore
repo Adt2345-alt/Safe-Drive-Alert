@@ -1,0 +1,29 @@
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Project Telemetry & Uploads
+data/logs/
+data/uploads/
+data/models/
+
+# System and IDE
+.idea/
+.vscode/
+.gemini/
+.agents/
+*.swp
+*.log
+Thumbs.db
+desktop.ini
+.DS_Store
