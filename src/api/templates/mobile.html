@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safe Drive HUD - Mobile Driver View</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        :root {
+            --bg-dark: #090C15;
+            --panel-bg: rgba(17, 24, 39, 0.85);
+            --cyan: #00F2FE;
+            --yellow: #F5A623;
+            --red: #FF4949;
+            --green: #00FF87;
+            --text-main: #E5E7EB;
+            --text-dim: #9CA3AF;
+            --font-display: 'Orbitron', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .mobile-header {
+            background: rgba(11, 15, 25, 0.95);
+            border-bottom: 1.5px solid rgba(0, 242, 254, 0.2);
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .mobile-header h1 {
+            font-family: var(--font-display);
+            font-size: 16px;
+            letter-spacing: 1px;
+            color: var(--cyan);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+        }
+
+        .logout-btn {
+            background: rgba(255, 73, 73, 0.15);
+            border: 1px solid var(--red);
+            color: var(--red);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-family: var(--font-display);
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        .mobile-container {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            flex-grow: 1;
+        }
+
+        /* Speed and Status widget */
+        .hud-status-card {
+            background: var(--panel-bg);
+            border: 1px solid rgba(0, 242, 254, 0.15);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .speedometer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .speed-val {
+            font-family: var(--font-display);
+            font-size: 40px;
+            font-weight: 900;
+            color: var(--cyan);
+            line-height: 1;
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.3);
+        }
+
+        .speed-unit {
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-telemetry {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 11px;
+        }
+
+        .tele-row {
+            display: flex;
+            gap: 8px;
+            color: var(--text-dim);
+        }
+
+        .tele-row span {
+            color: var(--text-main);
+            font-family: var(--font-display);
+        }
+
+        /* Mobile Map */
+        #mobile-map {
+            height: 200px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 242, 254, 0.15);
+            background: #090D16;
+            z-index: 10;
+        }
+
+        /* Driver Alert Banner */
+        .mobile-alert-banner {
+            background: rgba(255, 73, 73, 0.95);
+            border: 2px solid var(--red);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            font-family: var(--font-display);
+            font-size: 14px;
+            font-weight: 900;
+            color: white;
+            box-shadow: 0 0 15px rgba(255, 73, 73, 0.3);
+            display: none;
+            animation: pulse-shadow 1s infinite alternate;
+        }
+
+        .mobile-alert-banner.warning {
+            background: rgba(245, 166, 35, 0.95);
+            border-color: var(--yellow);
+            color: black;
+        }
+
+        @keyframes pulse-shadow {
+            from { box-shadow: 0 0 5px rgba(255, 73, 73, 0.4); }
+            to { box-shadow: 0 0 18px rgba(255, 73, 73, 0.8); }
+        }
+
+        /* Quick Report Grid */
+        .report-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            color: var(--cyan);
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .report-btn {
+            background: rgba(255, 73, 73, 0.15);
+            border: 1.5px solid var(--red);
+            color: var(--red);
+            border-radius: 12px;
+            padding: 20px 10px;
+            font-family: var(--font-display);
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .report-btn.bump {
+            background: rgba(245, 166, 35, 0.15);
+            border-color: var(--yellow);
+            color: var(--yellow);
+        }
+
+        .report-btn:active {
+            transform: scale(0.95);
+        }
+
+        .report-btn svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        /* Defects Registry List */
+        .defect-log {
+            background: var(--panel-bg);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px;
+            max-height: 180px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .defect-item {
+            display: flex;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 11px;
+            border-left: 3px solid var(--red);
+        }
+
+        .defect-item.bump {
+            border-left-color: var(--yellow);
+        }
+
+        .toast-msg {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--green);
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 0 15px rgba(0, 255, 135, 0.3);
+            z-index: 1000;
+            display: none;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translate(-50%, 20px); opacity: 0; }
+            to { transform: translate(-50%, 0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+            <img src="/static/logo.png" alt="Drive Safe Alert Logo" style="height: 28px; width: auto; filter: drop-shadow(0 0 4px rgba(0, 242, 254, 0.45)); border-radius: 4px;">
+            <span style="font-family: var(--font-display); font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: var(--cyan); text-transform: uppercase;">Drive Safe Alert</span>
+        </div>
+        <form action="/logout" method="POST" style="margin:0;">
+            <button type="submit" class="logout-btn">Logout</button>
+        </form>
+    </div>
+
+    <div class="mobile-container">
+        
+        <!-- Live HUD telemetry -->
+        <div class="hud-status-card">
+            <div class="speedometer">
+                <span class="speed-val" id="mob-speed">0</span>
+                <span class="speed-unit">km/h</span>
+            </div>
+            <div class="status-telemetry">
+                <div class="tele-row">V-ID: <span style="color:var(--cyan)">V-9872</span></div>
+                <div class="tele-row">Lat: <span id="mob-lat">0.00000</span></div>
+                <div class="tele-row">Lon: <span id="mob-lon">0.00000</span></div>
+                <div class="tele-row">Status: <span style="color:var(--green)">CONNECTED</span></div>
+            </div>
+        </div>
+
+        <!-- Warning Alert Banner -->
+        <div class="mobile-alert-banner" id="mob-alert-banner">
+            ⚠️ WARNING: POTHOLE DETECTED 10m AHEAD!
+        </div>
+
+        <!-- Mini Map -->
+        <div class="report-section">
+            <span class="section-title">Hazard Radar Tracking</span>
+            <div id="mobile-map"></div>
+        </div>
+
+        <!-- Quick Incident reporting -->
+        <div class="report-section">
+            <span class="section-title">Quick Defect Logging</span>
+            <div class="report-grid">
+                <button class="report-btn" onclick="submitReport('pothole')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-dasharray="4,4"/>
+                        <path d="M8 12h8M12 8v8" stroke="currentColor"/>
+                    </svg>
+                    REPORT POTHOLE
+                </button>
+                <button class="report-btn bump" onclick="submitReport('speed_bump')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M3 17h4c1-3 3-5 5-5s4 2 5 5h4" stroke="currentColor" stroke-linecap="round"/>
+                    </svg>
+                    REPORT SPEED BUMP
+                </button>
+            </div>
+        </div>
+
+        <!-- History Log -->
+        <div class="report-section">
+            <span class="section-title">My Defect Submissions</span>
+            <div class="defect-log" id="mob-defect-log">
+                <div style="font-size: 11px; color: var(--text-dim); text-align: center; width: 100%; padding-top: 10px;">Scanning reported defects registry...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="toast-msg" id="toast">DEFECT REGISTERED SUCCESSFULLY</div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        var map = L.map('mobile-map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([37.7699, -122.4668], 16);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        var driverMarker = null;
+        var driverIcon = L.divIcon({
+            className: 'pulsing-dot-container',
+            html: '<div style="background-color:#00F2FE; width:12px; height:12px; border-radius:50%; box-shadow: 0 0 10px #00F2FE; border: 1.5px solid #fff;"></div>',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
+        });
+
+        var obstacleMarkers = {};
+        
+        var potholeIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background-color:#FF4949; width:8px; height:8px; border-radius:50%; box-shadow: 0 0 6px #FF4949; border: 1px solid #fff;"></div>',
+            iconSize: [8, 8],
+            iconAnchor: [4, 4]
+        });
+
+        var bumpIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background-color:#F5A623; width:8px; height:8px; border-radius:50%; box-shadow: 0 0 6px #F5A623; border: 1px solid #fff;"></div>',
+            iconSize: [8, 8],
+            iconAnchor: [4, 4]
+        });
+
+        var lastLat = 37.7699;
+        var lastLon = -122.4668;
+        var recentReports = [];
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 2500);
+        }
+
+        function updateMobileHUD() {
+            fetch('/api/mobile/status')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) return;
+
+                    // Update UI dials
+                    document.getElementById('mob-speed').innerText = Math.round(data.speed_kmh);
+                    document.getElementById('mob-lat').innerText = data.latitude.toFixed(5);
+                    document.getElementById('mob-lon').innerText = data.longitude.toFixed(5);
+
+                    lastLat = data.latitude;
+                    lastLon = data.longitude;
+
+                    // Update driver position
+                    var driverLatLng = [data.latitude, data.longitude];
+                    if (!driverMarker) {
+                        driverMarker = L.marker(driverLatLng, {icon: driverIcon}).addTo(map);
+                    } else {
+                        driverMarker.setLatLng(driverLatLng);
+                    }
+                    map.panTo(driverLatLng, {animate: true, duration: 0.5});
+
+                    // Manage alerts
+                    const alertBanner = document.getElementById('mob-alert-banner');
+                    if (data.alert_active && data.current_alert) {
+                        const alert = data.current_alert;
+                        alertBanner.innerText = `⚠️ WARNING: ${alert.type.replace(/_/g, ' ').toUpperCase()} AHEAD (${alert.distance.toFixed(1)}m)!`;
+                        alertBanner.style.display = 'block';
+                        if (alert.type === 'pothole') {
+                            alertBanner.className = 'mobile-alert-banner';
+                        } else {
+                            alertBanner.className = 'mobile-alert-banner warning';
+                        }
+                    } else {
+                        alertBanner.style.display = 'none';
+                    }
+                })
+                .catch(err => console.error("Mobile status fetch failed", err));
+
+            // Sync reports list and other defects
+            fetch('/api/mobile/defects')
+                .then(res => res.json())
+                .then(data => {
+                    const log = document.getElementById('mob-defect-log');
+                    
+                    if (data.count === 0 && recentReports.length === 0) {
+                        log.innerHTML = `<div style="font-size: 11px; color: var(--text-dim); text-align: center; width: 100%; padding-top: 10px;">No registered defects detected yet</div>`;
+                        return;
+                    }
+
+                    // Render list
+                    log.innerHTML = "";
+                    
+                    // Show our reports first, then others
+                    const allItems = [...recentReports];
+                    data.defects.forEach(d => {
+                        if (!allItems.some(item => item.latitude === d.latitude && item.longitude === d.longitude)) {
+                            allItems.push(d);
+                        }
+                    });
+
+                    allItems.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = `defect-item ${item.type === 'pothole' ? 'pothole' : 'bump'}`;
+                        const tName = item.type === 'pothole' ? 'POTHOLE' : 'SPEED BUMP';
+                        const timeStr = item.time ? item.time : "DETECTED";
+                        div.innerHTML = `
+                            <div>
+                                <strong>${tName}</strong><br>
+                                <span>[${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}]</span>
+                            </div>
+                            <span style="color:var(--text-dim);">${timeStr}</span>
+                        `;
+                        log.appendChild(div);
+
+                        // Add marker to mobile map if not already present
+                        var key = item.latitude.toFixed(6) + "_" + item.longitude.toFixed(6);
+                        if (!obstacleMarkers[key]) {
+                            var icon = item.type === 'pothole' ? potholeIcon : bumpIcon;
+                            obstacleMarkers[key] = L.marker([item.latitude, item.longitude], {icon: icon}).addTo(map);
+                        }
+                    });
+                })
+                .catch(err => console.error("Mobile defects list failed", err));
+        }
+
+        function submitReport(type) {
+            const payload = {
+                type: type,
+                latitude: lastLat,
+                longitude: lastLon,
+                severity: "high"
+            };
+
+            fetch('/api/mobile/report', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast(`REGISTERED: ${type.replace('_', ' ').toUpperCase()}`);
+                    recentReports.unshift({
+                        type: type,
+                        latitude: lastLat,
+                        longitude: lastLon,
+                        time: new Date().toLocaleTimeString()
+                    });
+                    updateMobileHUD();
+                } else if (data.status === 'duplicate') {
+                    showToast("WARNING: IDENTIFIED DUPLICATE REJECTED");
+                }
+            })
+            .catch(err => {
+                console.error("Manual report submit failed", err);
+                showToast("ERROR REGISTERING INCIDENT");
+            });
+        }
+
+        setInterval(updateMobileHUD, 500);
+        updateMobileHUD();
+    </script>
+</body>
+</html>
