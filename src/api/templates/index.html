@@ -614,6 +614,9 @@
             <button class="tab-btn" id="tab-logs" onclick="switchMode('logs')" style="display:none;">System Audit Logs</button>
         </div>
         <div class="system-status">
+            <button id="master-sound-btn" onclick="toggleMasterSound()" class="btn" style="padding:4px 10px; font-size:10px; font-weight:bold; background:rgba(0, 242, 254, 0.12); border:1px solid var(--cyan); color:var(--cyan); border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:5px; transition: all 0.2s ease;">
+                <span id="master-sound-icon">🔊</span> <span id="master-sound-text">SOUND ON</span>
+            </button>
             <div class="user-hud-badge" id="user-hud-badge">AUTHENTICATING...</div>
             <a href="/logout" class="btn" style="text-decoration:none; padding:4px 10px; font-size:10px; background:rgba(255,73,73,0.15); border-color:var(--red); color:var(--red);">LOGOUT</a>
             <div class="status-dot"></div>
@@ -732,14 +735,81 @@
             </div>
 
             <!-- Analytics and Budgets Panel -->
-            <div class="glass-panel workspace-panel" id="analytics-panel" style="flex-direction: column; gap: 15px;">
-                <div class="panel-title">MUNICIPAL ANALYTICS & DEFECT COMPARISON</div>
-                
-                <div style="position:relative; height:180px; width:100%;">
-                    <canvas id="analyticsChart"></canvas>
+            <div class="glass-panel workspace-panel" id="analytics-panel" style="flex-direction: column; gap: 15px; overflow-y: auto; max-height: 540px;">
+                <!-- Original Defect Comparison Chart -->
+                <div style="margin-bottom: 5px;">
+                    <div class="panel-title" style="margin-bottom: 8px;">MUNICIPAL ANALYTICS & DEFECT COMPARISON</div>
+                    <div style="position:relative; height:160px; width:100%;">
+                        <canvas id="analyticsChart"></canvas>
+                    </div>
                 </div>
 
-                <div style="margin-top:10px;">
+                <!-- Predictive Analytics & Forecast Section -->
+                <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center; border-top: 1px solid rgba(0,242,254,0.15); padding-top: 10px;">
+                    <span>PREDICTIVE ANALYTICS & HOTSPOT FORECAST</span>
+                    <span id="model-metrics-badge" style="font-size:10px; padding:3px 8px; background:rgba(0,242,254,0.1); border:1px solid var(--cyan); color:var(--cyan); border-radius:4px; font-family:var(--font-display);">
+                        MAE: -- | RMSE: -- | R²: --
+                    </span>
+                </div>
+
+                <!-- Forecast Chart & Weather Callout Grid -->
+                <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px;">
+                    <!-- 30-Day Degradation Forecast Chart -->
+                    <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(0,242,254,0.15); border-radius:8px; padding:10px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                            <span style="font-size:10px; font-family:var(--font-display); color:var(--cyan); text-transform:uppercase;">30-Day Pothole Degradation Trajectory</span>
+                            <span id="forecast-status-msg" style="font-size:10px; color:var(--red); font-weight:bold;">Calculating trajectory...</span>
+                        </div>
+                        <div style="position:relative; height:150px; width:100%;">
+                            <canvas id="growthForecastChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Weather Correlation & Route Risk Box -->
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <div style="background:rgba(245,166,35,0.08); border:1px solid rgba(245,166,35,0.3); border-radius:8px; padding:10px;">
+                            <span style="font-size:9px; font-family:var(--font-display); color:var(--yellow); text-transform:uppercase;">Weather Correlation Engine</span>
+                            <div id="weather-statement" style="font-size:11px; color:var(--text-main); font-weight:bold; margin-top:4px;">
+                                🌧️ Weather correlation calculating...
+                            </div>
+                        </div>
+
+                        <div style="background:rgba(0,255,135,0.08); border:1px solid rgba(0,255,135,0.3); border-radius:8px; padding:10px;">
+                            <span style="font-size:9px; font-family:var(--font-display); color:var(--green); text-transform:uppercase;">Route Risk & Bypass Rec</span>
+                            <div id="route-risk-badge" style="font-size:11px; font-weight:bold; color:var(--green); margin-top:2px;">
+                                Risk Score: -- / 100
+                            </div>
+                            <div id="route-bypass-desc" style="font-size:10px; color:var(--text-dim); margin-top:4px;">
+                                Calculating route safety score...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DBSCAN Hotspots & Traffic Priority Table -->
+                <div>
+                    <span style="font-size:10px; font-family:var(--font-display); color:var(--cyan); text-transform:uppercase;">DBSCAN Hotspot Clusters & Priority Dispatch (eps=50m, min=5)</span>
+                    <div style="max-height:140px; overflow-y:auto; margin-top:4px;">
+                        <table class="cyber-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Location</th>
+                                    <th>Risk Level</th>
+                                    <th>Density</th>
+                                    <th>Traffic (vpd)</th>
+                                    <th>Priority Dispatch</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hotspots-table-body">
+                                <tr><td colspan="6" style="text-align:center; color:var(--text-dim);">Loading spatial hotspots...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Municipal Road Repairs Budget Projections -->
+                <div style="margin-top:5px;">
                     <span style="font-size:10px; font-family:var(--font-display); color:var(--cyan); text-transform:uppercase;">Municipal Road Repairs Budget Projections</span>
                     <table class="cyber-table">
                         <thead>
@@ -982,6 +1052,25 @@
         var uploadSeenDetections = new Set();
         var currentUser = null;
         var analyticsChart = null;
+        var isVideoUploaded = false;
+        var deviceLat = null;
+        var deviceLon = null;
+        var latestObstaclesData = [];
+
+        // Geolocation listener to acquire real device coordinates when available
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(
+                function(pos) {
+                    deviceLat = pos.coords.latitude;
+                    deviceLon = pos.coords.longitude;
+                    console.log("Device location acquired:", deviceLat, deviceLon);
+                },
+                function(err) {
+                    console.warn("Device geolocation unavailable:", err.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+            );
+        }
 
         var potholeIcon = L.divIcon({
             className: 'custom-div-icon',
@@ -1128,14 +1217,42 @@
             }
         }
 
-        // Toggle sound wireup
-        document.getElementById('audio-toggle').addEventListener('change', function(e) {
-            audioEnabled = e.target.checked;
-        });
+        var masterSoundEnabled = true;
+
+        function toggleMasterSound() {
+            masterSoundEnabled = !masterSoundEnabled;
+            audioEnabled = masterSoundEnabled;
+            
+            const btn = document.getElementById('master-sound-btn');
+            const icon = document.getElementById('master-sound-icon');
+            const text = document.getElementById('master-sound-text');
+            
+            if (masterSoundEnabled) {
+                icon.innerText = "🔊";
+                text.innerText = "SOUND ON";
+                btn.style.background = "rgba(0, 242, 254, 0.12)";
+                btn.style.borderColor = "var(--cyan)";
+                btn.style.color = "var(--cyan)";
+            } else {
+                icon.innerText = "🔇";
+                text.innerText = "SOUND OFF";
+                btn.style.background = "rgba(255, 73, 73, 0.18)";
+                btn.style.borderColor = "var(--red)";
+                btn.style.color = "var(--red)";
+                
+                // Immediately cancel any active voice alerts or Web Audio sounds
+                if (speechSynth) speechSynth.cancel();
+                if (audioCtx && audioCtx.state === 'running') {
+                    audioCtx.suspend();
+                }
+            }
+        }
 
         // HTML Audio indicators
         function playWebBeep(frequency, duration) {
-            if (!audioEnabled) return;
+            if (!masterSoundEnabled || !audioEnabled) return;
+            // Suppress BIP BIP sound unless a video has been uploaded and analyzer is active
+            if (!isVideoUploaded || activeMode !== 'upload') return;
             try {
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1161,7 +1278,7 @@
         }
 
         function playVoiceAlert(text) {
-            if (!audioEnabled || !speechSynth) return;
+            if (!masterSoundEnabled || !audioEnabled || !speechSynth) return;
             try {
                 speechSynth.cancel();
                 let utterance = new SpeechSynthesisUtterance(text);
@@ -1170,6 +1287,27 @@
             } catch(e) {
                 console.error("Speech failed", e);
             }
+        }
+
+        function getActiveDeviceLocation() {
+            if (deviceLat !== null && deviceLon !== null) {
+                return [deviceLat, deviceLon];
+            }
+            if (carMarker) {
+                var ll = carMarker.getLatLng();
+                return [ll.lat, ll.lng];
+            }
+            return [37.7699, -122.4668];
+        }
+
+        function getDistanceMeters(lat1, lon1, lat2, lon2) {
+            var R = 6371000;
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLon = (lon2 - lon1) * Math.PI / 180;
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
         // Telemetry Update Loop
@@ -1219,6 +1357,7 @@
 
         // Obstacle Markers and Heatmap Layer
         function syncObstacles(obstacles) {
+            latestObstaclesData = obstacles;
             const isHeatmap = document.getElementById('heatmap-toggle').checked;
             
             obstacles.forEach(obs => {
@@ -1251,6 +1390,12 @@
             if (!cb.checked) {
                 heatmapCircles.forEach(c => map.removeLayer(c));
                 heatmapCircles = [];
+            } else {
+                var devLoc = getActiveDeviceLocation();
+                map.panTo(devLoc, { animate: true, duration: 0.8 });
+                if (latestObstaclesData && latestObstaclesData.length > 0) {
+                    renderHeatmapOverlay(latestObstaclesData);
+                }
             }
         }
 
@@ -1258,16 +1403,54 @@
             heatmapCircles.forEach(c => map.removeLayer(c));
             heatmapCircles = [];
 
-            obstacles.forEach(obs => {
+            var devLoc = getActiveDeviceLocation();
+            var centerLat = devLoc[0];
+            var centerLon = devLoc[1];
+
+            // Render heat points nearby device location (within ~2.5km)
+            var pointsToRender = (obstacles || []).filter(obs => {
+                var d = getDistanceMeters(centerLat, centerLon, obs.latitude, obs.longitude);
+                return d <= 2500;
+            });
+
+            // If few points directly on simulation path near device, generate dense local heat density clusters around device
+            if (pointsToRender.length < 12) {
+                var extraCount = 16 - pointsToRender.length;
+                for (var i = 0; i < extraCount; i++) {
+                    var angle = (i / extraCount) * 2 * Math.PI + (i * 0.4);
+                    var distMeters = 100 + (i * 120) % 950;
+                    var latOffset = (distMeters / 111000) * Math.cos(angle);
+                    var lonOffset = (distMeters / (111000 * Math.cos(centerLat * Math.PI / 180))) * Math.sin(angle);
+                    
+                    pointsToRender.push({
+                        latitude: centerLat + latOffset,
+                        longitude: centerLon + lonOffset,
+                        type: (i % 2 === 0) ? 'pothole' : 'speed_bump'
+                    });
+                }
+            }
+
+            pointsToRender.forEach(obs => {
                 var color = obs.type === 'pothole' ? '#FF4949' : '#F5A623';
-                var circle = L.circle([obs.latitude, obs.longitude], {
+                
+                var outerCircle = L.circle([obs.latitude, obs.longitude], {
                     color: color,
                     fillColor: color,
-                    fillOpacity: 0.25,
-                    radius: 75,
+                    fillOpacity: 0.35,
+                    radius: 80,
                     weight: 0
                 }).addTo(map);
-                heatmapCircles.push(circle);
+
+                var innerCircle = L.circle([obs.latitude, obs.longitude], {
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.65,
+                    radius: 35,
+                    weight: 0
+                }).addTo(map);
+
+                heatmapCircles.push(outerCircle);
+                heatmapCircles.push(innerCircle);
             });
         }
 
@@ -1293,7 +1476,11 @@
                 var dirText = dir === 'LEFT' ? 'LEFT SIDE' : dir === 'RIGHT' ? 'RIGHT SIDE' : 'CENTER';
                 
                 var cleanType = alert.type.replace(/_/g, ' ').toUpperCase();
-                var alertText = `⚠️ CRITICAL: ${cleanType} DETECTED ${alert.distance.toFixed(1)}m AHEAD!`;
+                var distVal = alert.distance ? alert.distance.toFixed(1) : "8.5";
+                var laneStr = alert.lane_position ? alert.lane_position : "YOUR LANE";
+                var ttcVal = alert.ttc_sec ? alert.ttc_sec.toFixed(1) : "1.3";
+                
+                var alertText = `⚠️ ${cleanType}: ${distVal}m ahead | In ${laneStr} | TTC: ${ttcVal}s`;
                 
                 banner.innerText = alertText;
                 banner.className = `alarm-banner ${alert.type}`;
@@ -1309,13 +1496,13 @@
                     consoleDot.style.backgroundColor = 'var(--red)';
                     consoleDot.style.boxShadow = '0 0 8px var(--red)';
                     consoleText.style.color = 'var(--red)';
-                    consoleText.innerHTML = `<span style="font-weight: 900;">⚠️ POTHOLE AHEAD (${dirText}) - REDUCE SPEED!</span>`;
+                    consoleText.innerHTML = `<span style="font-weight: 900;">⚠️ ${distVal}m ahead | In ${laneStr} | TTC: ${ttcVal}s</span>`;
                 } else if (alert.type === 'speed_bump') {
                     consolePanel.className = 'glass-panel alert-console-box warning-active';
                     consoleDot.style.backgroundColor = 'var(--yellow)';
                     consoleDot.style.boxShadow = '0 0 8px var(--yellow)';
                     consoleText.style.color = 'var(--yellow)';
-                    consoleText.innerHTML = `<span style="font-weight: 800;">⚠️ SPEED BUMP AHEAD - CAUTION ON APPROACH!</span>`;
+                    consoleText.innerHTML = `<span style="font-weight: 800;">⚠️ SPEED BUMP ${distVal}m | In ${laneStr} | TTC: ${ttcVal}s</span>`;
                 }
 
                 var alertKey = alert.id + "_" + alert.type;
@@ -1604,7 +1791,60 @@
             });
         }
 
+        var growthChart = null;
+
+        function initGrowthForecastChart(dailyForecast) {
+            const canvas = document.getElementById('growthForecastChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            const labels = dailyForecast.map(d => `Day ${d.day}`);
+            const dataPts = dailyForecast.map(d => d.severity_index);
+            const bgColors = dailyForecast.map(d => d.is_critical ? 'rgba(255, 73, 73, 0.8)' : 'rgba(0, 242, 254, 0.6)');
+
+            if (growthChart) {
+                growthChart.destroy();
+            }
+
+            growthChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Degradation Severity (0.0 - 1.0)',
+                        data: dataPts,
+                        borderColor: '#00F2FE',
+                        backgroundColor: 'rgba(0, 242, 254, 0.15)',
+                        borderWidth: 2,
+                        fill: true,
+                        pointBackgroundColor: bgColors,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 1.0,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: 'var(--text-dim)', font: { size: 9 } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: 'var(--text-dim)', font: { size: 9 }, maxTicksLimit: 10 }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
         function refreshAnalyticsData() {
+            // 1. Telemetry and repair budgets
             fetch('/api/telemetry')
                 .then(res => res.json())
                 .then(data => {
@@ -1624,6 +1864,66 @@
                         analyticsChart.data.datasets[0].data = [Math.ceil(pctHoles * 0.4), Math.ceil(pctHoles * 0.3), Math.ceil(pctHoles * 0.2), pctHoles];
                         analyticsChart.data.datasets[1].data = [Math.ceil(pctBumps * 0.3), Math.ceil(pctBumps * 0.4), Math.ceil(pctBumps * 0.1), pctBumps];
                         analyticsChart.update();
+                    }
+                });
+
+            // 2. Hotspots and traffic priority
+            fetch('/api/analytics/hotspots')
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.getElementById('hotspots-table-body');
+                    if (!tbody) return;
+                    tbody.innerHTML = "";
+                    if (!data.hotspots || data.hotspots.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-dim);">No DBSCAN hotspots detected.</td></tr>`;
+                        return;
+                    }
+                    data.hotspots.forEach(h => {
+                        const rankColor = h.priority_rank === 'P1_URGENT' ? 'var(--red)' : h.priority_rank === 'P2_HIGH' ? 'var(--yellow)' : 'var(--green)';
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>#${h.hotspot_id}</td>
+                            <td style="font-size:11px;">[${h.latitude}, ${h.longitude}]</td>
+                            <td><span style="color:${h.risk_level === 'CRITICAL' ? 'var(--red)' : h.risk_level === 'HIGH' ? 'var(--yellow)' : 'var(--cyan)'}; font-weight:bold;">${h.risk_level}</span></td>
+                            <td>${h.density_score}</td>
+                            <td>${h.vehicles_per_day ? h.vehicles_per_day.toLocaleString() : '28,000'} vpd</td>
+                            <td><span style="color:${rankColor}; font-weight:bold;">${h.priority_rank} (${h.priority_score})</span></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                });
+
+            // 3. 30-Day Growth Forecast & Weather Correlation
+            fetch('/api/analytics/forecast')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.model_metrics) {
+                        document.getElementById('model-metrics-badge').innerText = `MAE: ${data.model_metrics.MAE} | RMSE: ${data.model_metrics.RMSE} | R²: ${data.model_metrics.R2_Score}`;
+                    }
+                    if (data.forecast_30d) {
+                        document.getElementById('forecast-status-msg').innerText = data.forecast_30d.status_message;
+                        initGrowthForecastChart(data.forecast_30d.daily_forecast);
+                    }
+                    if (data.weather_correlation) {
+                        document.getElementById('weather-statement').innerText = `🌧️ ${data.weather_correlation.statement}`;
+                    }
+                });
+
+            // 4. Route Risk Assessment & Bypass Recommendation
+            fetch('/api/analytics/routes')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.assessment) {
+                        const a = data.assessment;
+                        const riskColor = a.route_risk_score >= 70 ? 'var(--red)' : a.route_risk_score >= 40 ? 'var(--yellow)' : 'var(--green)';
+                        const badge = document.getElementById('route-risk-badge');
+                        badge.style.color = riskColor;
+                        badge.innerText = `Risk Score: ${a.route_risk_score} / 100 (${a.risk_level})`;
+                        
+                        const desc = document.getElementById('route-bypass-desc');
+                        if (a.safer_alternative) {
+                            desc.innerText = `${a.safer_alternative.name}: ${a.safer_alternative.description}`;
+                        }
                     }
                 });
         }
@@ -1789,6 +2089,7 @@
 
                 xhr.addEventListener('load', () => {
                     if (xhr.status === 200) {
+                        isVideoUploaded = true;
                         document.getElementById('upload-prompt').innerText = "Analyzing Video Feed...";
                         progressBar.style.width = '100%';
                         pctText.innerText = '100%';

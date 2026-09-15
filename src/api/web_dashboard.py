@@ -17,6 +17,11 @@ from src.utils.jwt_helper import encode_jwt
 from src.utils.auth_helper import requires_auth, get_current_user, ROLE_PERMISSIONS
 from src.api.mobile_api import mobile_api_bp, init_mobile_api
 from src.core.upload_processor import UploadProcessor
+from src.analytics.clustering import HotspotClusterer
+from src.analytics.prediction import PotholeGrowthPredictor
+from src.analytics.weather_integration import WeatherCorrelator
+from src.analytics.traffic_integration import TrafficImpactAnalyzer
+from src.analytics.risk_scorer import RouteRiskScorer
 
 app = Flask(__name__, template_folder="templates")
 CORS(app)
@@ -336,6 +341,32 @@ def stream_video():
 def video_feed():
     return Response(stream_video(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+def stream_depth_video():
+    while True:
+        if sys_manager is None:
+            time.sleep(0.1)
+            continue
+            
+        frame = sys_manager.get_latest_depth_frame()
+        if frame is None:
+            time.sleep(0.04)
+            continue
+            
+        success, encoded_image = cv2.imencode('.jpg', frame)
+        if not success:
+            time.sleep(0.04)
+            continue
+            
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + encoded_image.tobytes() + b'\r\n')
+               
+        time.sleep(1.0 / Config.FPS)
+
+@app.route('/depth_feed')
+@requires_auth(permission='live_feed')
+def depth_feed():
+    return Response(stream_depth_video(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 def stream_upload_video():
     global active_upload_processor
     while True:
@@ -525,6 +556,79 @@ def send_control():
         return jsonify({"status": "success", "message": f"Injected '{test_type}' obstacle 12 meters ahead."})
         
     return jsonify({"error": f"Unknown action: {action}"}), 400
+
+# --- PREDICTIVE ANALYTICS API ENDPOINTS ---
+
+@app.route('/api/analytics/hotspots', methods=['GET'])
+@requires_auth(permission='view_dashboard')
+def get_analytics_hotspots():
+    clusterer = HotspotClusterer(eps_meters=50.0, min_samples=5)
+    traffic_analyzer = TrafficImpactAnalyzer()
+    
+    defects = get_defects()
+    if sys_manager and hasattr(sys_manager, 'road_sim'):
+        for obs in sys_manager.road_sim.obstacles:
+            defects.append({
+                "latitude": obs["gps"][0],
+                "longitude": obs["gps"][1],
+                "severity": obs["severity"],
+                "type": obs["type"]
+            })
+            
+    cluster_res = clusterer.cluster_defects(defects)
+    enriched_hotspots = traffic_analyzer.evaluate_hotspot_traffic(cluster_res["hotspots"])
+    
+    return jsonify({
+        "status": "success",
+        "hotspots": enriched_hotspots,
+        "noise_count": cluster_res["noise_count"],
+        "total_clusters": cluster_res["total_clusters"]
+    })
+
+@app.route('/api/analytics/forecast', methods=['GET'])
+@requires_auth(permission='view_dashboard')
+def get_analytics_forecast():
+    predictor = PotholeGrowthPredictor()
+    weather_correlator = WeatherCorrelator()
+    
+    metrics = predictor.evaluate_performance()
+    forecast = predictor.predict_growth_30_days(initial_severity=0.42, age_days=14, rain_mm=28.0, freeze_cycles=3, traffic_k_vpd=35.0)
+    weather = weather_correlator.compute_weather_correlation(rainfall_mm=28.0, freeze_cycles=3)
+    
+    return jsonify({
+        "status": "success",
+        "model_metrics": metrics,
+        "forecast_30d": forecast,
+        "weather_correlation": weather
+    })
+
+@app.route('/api/analytics/routes', methods=['GET'])
+@requires_auth(permission='view_dashboard')
+def get_analytics_routes():
+    clusterer = HotspotClusterer(eps_meters=50.0, min_samples=5)
+    risk_scorer = RouteRiskScorer(hotspot_clusterer=clusterer)
+    
+    defects = get_defects()
+    if sys_manager and hasattr(sys_manager, 'road_sim'):
+        for obs in sys_manager.road_sim.obstacles:
+            defects.append({
+                "latitude": obs["gps"][0],
+                "longitude": obs["gps"][1],
+                "severity": obs["severity"],
+                "type": obs["type"]
+            })
+            
+    cluster_res = clusterer.cluster_defects(defects)
+    route_points = []
+    if sys_manager and hasattr(sys_manager, 'road_sim'):
+        route_points = sys_manager.road_sim.route
+        
+    assessment = risk_scorer.evaluate_route_risk(route_points, hotspots=cluster_res["hotspots"])
+    
+    return jsonify({
+        "status": "success",
+        "assessment": assessment
+    })
 
 def run_server(host=Config.HOST, port=Config.PORT):
     import logging

@@ -387,6 +387,20 @@
         var lastLon = -122.4668;
         var recentReports = [];
 
+        // Device geolocation listener
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(
+                function(pos) {
+                    lastLat = pos.coords.latitude;
+                    lastLon = pos.coords.longitude;
+                },
+                function(err) {
+                    console.warn("Mobile geolocation fallback:", err.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+            );
+        }
+
         function showToast(message) {
             const toast = document.getElementById('toast');
             toast.innerText = message;

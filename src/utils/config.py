@@ -26,6 +26,18 @@ class Config:
     TRACKING_MAX_DISAPPEARED = 10  # frames
     TRACKING_MIN_DISTANCE_PIXELS = 50 # centroid distance to match
 
+    # Camera Intrinsics & Calibration Parameters
+    FOCAL_LENGTH_PX = 700.0          # fx = fy (pixels)
+    CAMERA_HEIGHT_M = 1.4            # Height above road floor (meters)
+    PRINCIPAL_POINT_X = 320.0        # cx (pixels)
+    PRINCIPAL_POINT_Y = 240.0        # cy (pixels)
+    CAMERA_PITCH_RAD = 0.05          # Camera downward tilt angle (radians)
+
+    # Time-to-Collision (TTC) & Lane Parameters
+    CRITICAL_TTC_THRESHOLD = 2.0     # seconds
+    WARNING_TTC_THRESHOLD = 3.5      # seconds
+    EGO_LANE_HALF_WIDTH_PX = 140     # Lane corridor width in image space
+
     # Alert System Settings
     ALERT_TRIGGER_DISTANCE = 15.0  # meters (critical distance to trigger alert)
     COOLDOWN_PERIOD_SECONDS = 3.0  # prevent spamming alerts for the same physical object

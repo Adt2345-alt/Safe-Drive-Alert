@@ -85,6 +85,8 @@ class AlertSystem:
         """
         Plays a non-blocking audio cue using winsound on Windows or a stdout bell on UNIX.
         """
+        if not getattr(self, "sound_enabled", False):
+            return
         try:
             if winsound:
                 # Pothole: Double high pitch beep

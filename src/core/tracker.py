@@ -1,13 +1,15 @@
 from src.utils.config import Config
 
 class TrackedObject:
-    def __init__(self, obj_id, class_name, bbox, distance, severity, gps):
+    def __init__(self, obj_id, class_name, bbox, distance, severity, gps, confidence=1.0, fusion_mode="DEFAULT"):
         self.id = obj_id
         self.class_name = class_name
         self.bbox = bbox
         self.distance = distance
         self.severity = severity
         self.gps = gps
+        self.confidence = confidence
+        self.fusion_mode = fusion_mode
         self.disappeared = 0
         self.alert_triggered = False
 
@@ -30,8 +32,14 @@ class ObjectTracker:
             bbox = det["bbox"]
             dist = det["distance_m"]
             class_name = det["class"]
-            severity = det["severity"]
-            gps = det["gps"]
+            severity = det.get("severity", "medium")
+            gps = det.get("gps", (0.0, 0.0))
+            if isinstance(gps, tuple):
+                gps = (gps[0], gps[1])
+            elif "latitude" in det:
+                gps = (det["latitude"], det["longitude"])
+            confidence = det.get("confidence", 1.0)
+            fusion_mode = det.get("fusion_mode", "DEFAULT")
             
             if obj_id in self.tracked_objects:
                 # Update existing tracked object
@@ -40,6 +48,8 @@ class ObjectTracker:
                 tracked.distance = dist
                 tracked.gps = gps
                 tracked.severity = severity
+                tracked.confidence = confidence
+                tracked.fusion_mode = fusion_mode
                 tracked.disappeared = 0  # reset disappeared count
             else:
                 # Create a new tracked object
@@ -49,7 +59,9 @@ class ObjectTracker:
                     bbox=bbox,
                     distance=dist,
                     severity=severity,
-                    gps=gps
+                    gps=gps,
+                    confidence=confidence,
+                    fusion_mode=fusion_mode
                 )
                 
         # Remove objects that have disappeared for too many frames
