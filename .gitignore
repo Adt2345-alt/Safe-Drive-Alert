@@ -27,6 +27,7 @@ data/models/*
 .agents/
 *.swp
 *.log
+*.db-journal
 Thumbs.db
 desktop.ini
 .DS_Store

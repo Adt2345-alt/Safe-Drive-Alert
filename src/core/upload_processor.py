@@ -132,6 +132,21 @@ class UploadProcessor:
                             "distance_m": obj.distance
                         })
                         self.logger.info(f"Video Upload Anomaly: Detected {obj.class_name.upper()} at {timestamp_s}s (distance: {obj.distance}m)")
+                        try:
+                            from backend.api.defects_db import insert_defect
+                            insert_defect(
+                                latitude=getattr(obj, 'gps', (12.9716, 77.5946))[0] or 12.9716,
+                                longitude=getattr(obj, 'gps', (12.9716, 77.5946))[1] or 77.5946,
+                                defect_type="pothole" if obj.class_name == "pothole" else ("speedbump" if obj.class_name == "speed_bump" else "crack"),
+                                severity=obj.severity if obj.severity in ["Critical", "High", "Medium", "Low"] else "High",
+                                confidence=getattr(obj, 'confidence', 0.92),
+                                depth_cm=getattr(obj, 'depth_cm', 7.2),
+                                road_name="Outer Ring Road Arterial",
+                                detection_source="Road Video Analyzer"
+                            )
+
+                        except Exception as ex:
+                            self.logger.warning(f"Failed to record upload detection to defects.db: {ex}")
 
                 # Annotate frame
                 annotated = self._annotate_frame(frame_resized, tracked_objects, timestamp_s)

@@ -76,14 +76,15 @@ class HotspotClusterer:
         }
 
     def _generate_synthetic_hotspots(self):
-        """Generates realistic synthetic municipal hotspots around San Francisco route for testing."""
+        """Generates realistic synthetic municipal hotspots around Bengaluru India route for testing."""
         base_coords = [
-            (37.7749, -122.4194, "Market St & 5th St Corridor", 18),
-            (37.7699, -122.4668, "Golden Park South Avenue", 14),
-            (37.7833, -122.4167, "Tenderloin District Intersection", 22),
-            (37.7600, -122.4350, "Mission District 16th St Transit", 11),
-            (37.7500, -122.4180, "Potrero Hill Heavy Freight Zone", 16)
+            (12.9716, 77.5946, "MG Road & Brigade Road Junction", 18),
+            (12.9780, 77.6400, "Indiranagar 100ft Road Corridor", 14),
+            (12.9350, 77.6240, "Koramangala 80ft Road Signal", 22),
+            (12.9800, 77.6950, "Outer Ring Road (Ecoworld) Flyover", 11),
+            (13.0350, 77.5970, "Hebbal Flyover Heavy Freight Zone", 16)
         ]
+
         hotspots = []
         for i, (lat, lon, name, count) in enumerate(base_coords):
             hotspots.append({

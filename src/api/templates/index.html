@@ -608,6 +608,7 @@
         <div class="nav-tabs" id="header-tabs">
             <button class="tab-btn active" id="tab-sim" onclick="switchMode('sim')">Simulation Drive</button>
             <button class="tab-btn" id="tab-upload" onclick="switchMode('upload')" style="display:none;">Road Video Analyzer</button>
+            <button class="tab-btn" id="tab-map" onclick="window.location.href='/map'" style="display:none;">HD Map View</button>
             <button class="tab-btn" id="tab-analytics" onclick="switchMode('analytics')" style="display:none;">Analytics & Budgets</button>
             <button class="tab-btn" id="tab-workorders" onclick="switchMode('workorders')" style="display:none;">Work Assignments</button>
             <button class="tab-btn" id="tab-users" onclick="switchMode('users')" style="display:none;">User Directory</button>
@@ -1132,6 +1133,9 @@
             // 1. Show authorized tabs
             if (p.includes("generate_reports")) {
                 document.getElementById("tab-upload").style.display = "block";
+            }
+            if (p.includes("view_analytics") || p.includes("generate_reports") || p.includes("submit_reports")) {
+                document.getElementById("tab-map").style.display = "block";
             }
             if (p.includes("view_analytics")) {
                 document.getElementById("tab-analytics").style.display = "block";

@@ -16,6 +16,13 @@ from src.utils.db import (
 from src.utils.jwt_helper import encode_jwt
 from src.utils.auth_helper import requires_auth, get_current_user, ROLE_PERMISSIONS
 from src.api.mobile_api import mobile_api_bp, init_mobile_api
+try:
+    from backend.api.map_data import map_data_bp
+except ImportError:
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from backend.api.map_data import map_data_bp
+
 from src.core.upload_processor import UploadProcessor
 from src.analytics.clustering import HotspotClusterer
 from src.analytics.prediction import PotholeGrowthPredictor
@@ -31,8 +38,9 @@ UPLOAD_FOLDER = os.path.join(Config.DATA_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Register mobile API blueprint
+# Register mobile API and Map Data blueprints
 app.register_blueprint(mobile_api_bp)
+app.register_blueprint(map_data_bp)
 
 logger = LogManager.get_system_logger()
 sys_manager = None
@@ -314,6 +322,11 @@ def index():
     if role == "DRIVER":
         return render_template('mobile.html')
     return render_template('index.html')
+
+@app.route('/map')
+@requires_auth()
+def map_view():
+    return render_template('map_view.html')
 
 def stream_video():
     while True:

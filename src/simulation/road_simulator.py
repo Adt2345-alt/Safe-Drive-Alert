@@ -107,10 +107,10 @@ class RoadSimulator:
             self.speed_kmh = self.target_speed_kmh
 
     def _generate_route_loop(self):
-        # Let's generate a nice bean-shaped loop in San Francisco near Golden Gate Park
-        # Center: 37.7699, -122.4668
-        center_lat = 37.7699
-        center_lon = -122.4668
+        # Generate route loop in Bengaluru, India (MG Road / Indiranagar Corridor)
+        # Center: 12.9716, 77.5946
+        center_lat = 12.9716
+        center_lon = 77.5946
         
         # Radii in lat/lon space
         r_lat = 0.008
@@ -132,6 +132,7 @@ class RoadSimulator:
         # Ensure it's a closed loop by matching first and last point
         points.append(points[0])
         return points
+
 
     def _calculate_route_length(self):
         total_len = 0.0

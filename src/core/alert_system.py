@@ -46,8 +46,11 @@ class AlertSystem:
                 
                 # Determine alert properties
                 alert_type = obj.class_name
-                severity = obj.severity
+                severity = getattr(obj, "severity", "High") or "High"
                 lat, lon = obj.gps
+                if (lat == 0.0 and lon == 0.0) or not lat or not lon:
+                    lat = current_telemetry.get("latitude", 12.9716)
+                    lon = current_telemetry.get("longitude", 77.5946)
                 speed = current_telemetry["speed_kmh"]
                 
                 self.last_alert_time = now
@@ -61,10 +64,26 @@ class AlertSystem:
                     "bbox": obj.bbox,
                     "timestamp": now
                 }
+
                 new_alert = self.active_alert
                 
-                # Record in metrics
+                # Record in metrics & SQLite defects.db
                 self.metrics.record_detection(alert_type, lat, lon, severity, obj.id)
+                try:
+                    from backend.api.defects_db import insert_defect
+                    insert_defect(
+                        latitude=lat,
+                        longitude=lon,
+                        defect_type="pothole" if alert_type == "pothole" else ("speedbump" if alert_type == "speed_bump" else "crack"),
+                        severity=severity if severity in ["Critical", "High", "Medium", "Low"] else "High",
+                        confidence=getattr(obj, 'confidence', 0.94),
+                        depth_cm=getattr(obj, 'depth_cm', 6.5),
+                        road_name="MG Road Corridor",
+                        detection_source="Simulation Drive"
+                    )
+
+                except Exception as e:
+                    self.logger.warning(f"Failed to record live detection to defects.db: {e}")
                 
                 # Log detection to file & console
                 LogManager.log_detection(
