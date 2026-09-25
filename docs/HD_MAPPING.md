@@ -31,8 +31,8 @@ The **SafeDrive AI HD Mapping & Digital Twin System** is an enterprise geospatia
 
 ### Keyless Open Basemap Setup
 - **Map Library**: MapLibre GL JS v3.6.2 (`maplibre-gl.js`, `maplibre-gl.css`)
-- **Vector Basemap Style**: CartoDB Dark Matter (`https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json`)
-- **Attribution**: `MAP DATA © OpenStreetMap contributors, © CARTO`
+- **Vector Basemap Style**: OpenFreeMap Dark (`https://tiles.openfreemap.org/styles/dark`)
+- **Attribution**: `MAP DATA © OpenStreetMap contributors, © OpenFreeMap`
 
 ---
 

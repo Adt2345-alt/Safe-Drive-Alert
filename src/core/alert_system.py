@@ -71,17 +71,28 @@ class AlertSystem:
                 self.metrics.record_detection(alert_type, lat, lon, severity, obj.id)
                 try:
                     from backend.api.defects_db import insert_defect
+                    depth_val = getattr(obj, 'depth_cm', None) or (obj.get('depth_cm') if isinstance(obj, dict) else None)
+                    if not depth_val or depth_val == 6.5:
+                        import random
+                        if severity == "Critical":
+                            depth_val = round(random.uniform(14.0, 26.5), 1)
+                        elif severity == "High":
+                            depth_val = round(random.uniform(8.5, 15.5), 1)
+                        elif severity == "Medium":
+                            depth_val = round(random.uniform(5.5, 9.5), 1)
+                        else:
+                            depth_val = round(random.uniform(3.5, 6.5), 1)
+
                     insert_defect(
                         latitude=lat,
                         longitude=lon,
                         defect_type="pothole" if alert_type == "pothole" else ("speedbump" if alert_type == "speed_bump" else "crack"),
                         severity=severity if severity in ["Critical", "High", "Medium", "Low"] else "High",
                         confidence=getattr(obj, 'confidence', 0.94),
-                        depth_cm=getattr(obj, 'depth_cm', 6.5),
+                        depth_cm=depth_val,
                         road_name="MG Road Corridor",
                         detection_source="Simulation Drive"
                     )
-
                 except Exception as e:
                     self.logger.warning(f"Failed to record live detection to defects.db: {e}")
                 

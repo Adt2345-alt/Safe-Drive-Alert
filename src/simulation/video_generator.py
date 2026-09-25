@@ -140,8 +140,8 @@ class VideoGenerator:
             # Distance to obstacle (taking loop wrapping into account)
             z = (obs["distance"] - dist) % total_len
             
-            # Obstacles are visible if they are within 60 meters ahead
-            if 0.1 < z < 60.0:
+            # Obstacles are visible if they are within 120 meters ahead (Long-range horizon)
+            if 0.1 < z < 120.0:
                 # Perspective factor
                 k = 2.5 / (2.5 + z)
                 
@@ -149,17 +149,16 @@ class VideoGenerator:
                 y = int(self.y_horizon + (self.height - self.y_horizon) * k)
                 
                 # Lateral offset mapping
-                # At bottom (z=0, k=1), 1 meter offset corresponds to ~120 pixels
                 road_width_scale = 120.0
                 dx = int(obs["lateral_offset"] * road_width_scale * k)
                 x = self.x_center + dx
                 
-                # Scale sizing
+                # Scale sizing with long-range visibility floor
                 if obs["type"] == "pothole":
-                    w = int(60 * k)
-                    h = int(22 * k)
-                    w = max(4, w)
-                    h = max(2, h)
+                    w = int(70 * k)
+                    h = int(26 * k)
+                    w = max(6, w)
+                    h = max(3, h)
                     
                     # Store ground truth info for detector
                     visible.append({
@@ -174,22 +173,26 @@ class VideoGenerator:
                         "gps": obs["gps"]
                     })
                     
-                    # Draw Pothole on canvas
-                    # Dark center
-                    cv2.ellipse(frame, (x, y), (w, h), 0, 0, 360, (20, 20, 25), -1)
-                    # Outer jagged/damaged border
-                    cv2.ellipse(frame, (x, y), (w, h), 0, 0, 360, (40, 45, 50), max(1, int(2 * k)))
+                    # Enhanced 3D Pothole Rendering
+                    # Outer warning shadow aura
+                    cv2.ellipse(frame, (x, y), (w + 2, h + 2), 0, 0, 360, (10, 10, 15), -1)
+                    # Outer asphalt crack rim
+                    cv2.ellipse(frame, (x, y), (w, h), 0, 0, 360, (55, 60, 70), max(1, int(2.5 * k)))
+                    # Deep dark pit cavity
+                    cv2.ellipse(frame, (x, y + max(1, int(2 * k))), (int(w * 0.85), int(h * 0.85)), 0, 0, 360, (12, 12, 16), -1)
+                    # Inner water reflection / deep shadow core
+                    cv2.ellipse(frame, (x - int(w * 0.1), y + max(1, int(2 * k))), (int(w * 0.5), int(h * 0.4)), 0, 0, 360, (5, 5, 8), -1)
                     
-                    # Pothole inner cracks/texture
-                    if k > 0.15:
-                        cv2.line(frame, (x - w//3, y), (x + w//3, y - h//4), (10, 10, 12), max(1, int(1*k)))
-                        cv2.line(frame, (x - w//4, y - h//3), (x + w//5, y + h//3), (10, 10, 12), max(1, int(1*k)))
+                    # Inner fracture cracks
+                    if k > 0.08:
+                        cv2.line(frame, (x - w//3, y), (x + w//3, y - h//4), (8, 8, 10), max(1, int(1.2 * k)))
+                        cv2.line(frame, (x - w//4, y - h//3), (x + w//5, y + h//3), (8, 8, 10), max(1, int(1.2 * k)))
                         
                 elif obs["type"] == "speed_bump":
-                    w = int(90 * k)
-                    h = int(18 * k)
-                    w = max(6, w)
-                    h = max(2, h)
+                    w = int(105 * k)
+                    h = int(22 * k)
+                    w = max(10, w)
+                    h = max(4, h)
                     
                     visible.append({
                         "id": obs["id"],
@@ -203,46 +206,39 @@ class VideoGenerator:
                         "gps": obs["gps"]
                     })
                     
-                    # Draw Speed Bump (yellow and black diagonal striped ramp)
-                    # Draw base black polygon
+                    # Enhanced 3D Speed Bump (Yellow and Black Diagonal Striped Ramp)
                     bump_poly = np.array([
                         [x - w//2, y + h//2],
                         [x - w//3, y - h//2],
                         [x + w//3, y - h//2],
                         [x + w//2, y + h//2]
                     ], np.int32)
-                    cv2.fillPoly(frame, [bump_poly], (30, 30, 30))
+                    cv2.fillPoly(frame, [bump_poly], (25, 25, 25))
                     
-                    # Draw yellow diagonal stripes inside the speed bump
-                    if k > 0.05:
-                        num_stripes = 6
+                    # Yellow diagonal stripes
+                    if k > 0.02:
+                        num_stripes = 7
                         for s in range(num_stripes):
-                            # Interpolate stripes left-to-right
                             frac = s / (num_stripes - 1)
                             sx = int(x - w//2 + frac * w)
-                            
-                            # Yellow diagonal lines
                             cv2.line(frame, 
-                                     (sx - int(8*k), y + h//2), 
-                                     (sx + int(8*k) - int(w*0.1), y - h//2), 
-                                     (0, 200, 230), # Neon Yellow-orange
-                                     max(1, int(6 * k)))
+                                     (sx - int(9 * k), y + h//2), 
+                                     (sx + int(9 * k) - int(w * 0.08), y - h//2), 
+                                     (0, 215, 255), # Bright Neon Amber Yellow
+                                     max(1, int(7 * k)))
                                      
-                    # Draw neon border around the bump
-                    cv2.polylines(frame, [bump_poly], True, (0, 200, 230), max(1, int(1.5 * k)))
+                    # Glowing safety hazard border around bump
+                    cv2.polylines(frame, [bump_poly], True, (0, 242, 254), max(1, int(2 * k)))
                     
                 elif obs["type"] == "speed_limit_60" or obs["type"] == "hard_turn_ahead":
                     sign_type = obs["type"]
-                    # Elevation parameters: post height is ~1.2m
-                    post_h = int(140 * k)
-                    sign_r = int(20 * k)
-                    sign_r = max(4, sign_r)
-                    post_h = max(10, post_h)
+                    post_h = int(150 * k)
+                    sign_r = int(24 * k)
+                    sign_r = max(6, sign_r)
+                    post_h = max(14, post_h)
                     
-                    # Sign center coordinate
                     cy = y - post_h - sign_r
                     
-                    # Add to visible list (for detector)
                     visible.append({
                         "id": obs["id"],
                         "type": sign_type,
@@ -255,43 +251,40 @@ class VideoGenerator:
                         "gps": obs["gps"]
                     })
                     
-                    # Draw grey sign post
-                    cv2.line(frame, (x, y), (x, y - post_h), (80, 85, 90), max(1, int(3 * k)))
+                    # Metallic sign post with ground shadow
+                    cv2.line(frame, (x, y), (x, y - post_h), (110, 115, 125), max(1, int(3.5 * k)))
                     
-                    # Draw sign panel
                     if sign_type == "speed_limit_60":
-                        # White circle
-                        cv2.circle(frame, (x, cy), sign_r, (255, 255, 255), -1)
-                        # Red border (BGR: red is (73, 73, 255))
-                        cv2.circle(frame, (x, cy), sign_r, (73, 73, 255), max(1, int(3.5 * k)))
-                        # Black text "60" inside
-                        if k > 0.08:
-                            font_scale = 0.28 * k * 10
-                            cv2.putText(frame, "60", (x - int(7*k), cy + int(3*k)), cv2.FONT_HERSHEY_SIMPLEX, 
-                                        font_scale, (15, 15, 15), max(1, int(2 * k)), cv2.LINE_AA)
+                        # Reflective White circle plate
+                        cv2.circle(frame, (x, cy), sign_r, (250, 250, 250), -1)
+                        # Bold Red outer ring
+                        cv2.circle(frame, (x, cy), sign_r, (40, 40, 245), max(1, int(4 * k)))
+                        # Crisp black text "60"
+                        if k > 0.04:
+                            font_scale = max(0.2, 0.32 * k * 10)
+                            cv2.putText(frame, "60", (x - int(8 * k), cy + int(4 * k)), cv2.FONT_HERSHEY_SIMPLEX, 
+                                        font_scale, (10, 10, 10), max(1, int(2.5 * k)), cv2.LINE_AA)
                     elif sign_type == "hard_turn_ahead":
-                        # Yellow diamond
+                        # Diamond warning sign
                         diamond_pts = np.array([
                             [x, cy - sign_r],      # Top
                             [x + sign_r, cy],      # Right
                             [x, cy + sign_r],      # Bottom
                             [x - sign_r, cy]       # Left
                         ], np.int32)
-                        cv2.fillPoly(frame, [diamond_pts], (0, 206, 245)) # Yellow BGR: (0, 206, 245)
-                        cv2.polylines(frame, [diamond_pts], True, (15, 20, 25), max(1, int(1.5 * k)))
+                        cv2.fillPoly(frame, [diamond_pts], (0, 215, 255)) # Bright Amber
+                        cv2.polylines(frame, [diamond_pts], True, (15, 15, 20), max(1, int(2 * k)))
                         
                         # Black curving arrow inside
-                        if k > 0.08:
-                            # Draw chevron-like shape or curved line curving right
-                            cv2.ellipse(frame, (x - int(4*k), cy + int(4*k)), (int(10*k), int(10*k)), 
-                                        0, 270, 360, (15, 15, 15), max(1, int(2.5 * k)))
-                            # Arrow tip
+                        if k > 0.04:
+                            cv2.ellipse(frame, (x - int(4 * k), cy + int(4 * k)), (int(10 * k), int(10 * k)), 
+                                        0, 270, 360, (10, 10, 10), max(1, int(3 * k)))
                             tip_pts = np.array([
-                                [x + int(6*k), cy - int(2*k)],
-                                [x + int(6*k), cy + int(4*k)],
-                                [x + int(1*k), cy + int(2*k)]
+                                [x + int(7 * k), cy - int(2 * k)],
+                                [x + int(7 * k), cy + int(4 * k)],
+                                [x + int(1 * k), cy + int(2 * k)]
                             ], np.int32)
-                            cv2.fillPoly(frame, [tip_pts], (15, 15, 15))
+                            cv2.fillPoly(frame, [tip_pts], (10, 10, 10))
                     
         # Sort visible obstacles by distance (closest last, so they are drawn on top)
         visible.sort(key=lambda o: o["distance"], reverse=True)

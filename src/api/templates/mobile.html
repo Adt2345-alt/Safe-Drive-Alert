@@ -346,8 +346,11 @@
 
     <div class="toast-msg" id="toast">DEFECT REGISTERED SUCCESSFULLY</div>
 
-    <!-- Leaflet JS -->
+    <!-- Leaflet JS & MapLibre Integration for OpenFreeMap -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
 
     <script>
         var map = L.map('mobile-map', {
@@ -355,8 +358,8 @@
             attributionControl: false
         }).setView([37.7699, -122.4668], 16);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19
+        L.maplibreGL({
+            style: 'https://tiles.openfreemap.org/styles/dark'
         }).addTo(map);
 
         var driverMarker = null;

@@ -31,6 +31,8 @@ from src.analytics.traffic_integration import TrafficImpactAnalyzer
 from src.analytics.risk_scorer import RouteRiskScorer
 
 app = Flask(__name__, template_folder="templates")
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 CORS(app)
 
 # Configure upload directory

@@ -170,42 +170,75 @@ class UploadProcessor:
         annotated = frame.copy()
         font = cv2.FONT_HERSHEY_SIMPLEX
         
-        # Draw bounding boxes and labels
-        for obj in tracked_objects:
+        # Sort tracked objects so closer objects render on top cleanly
+        objects = sorted(tracked_objects, key=lambda o: o.distance, reverse=True)
+        
+        for obj in objects:
             xmin, ymin, xmax, ymax = obj.bbox
             
-            # Color coding: Red for potholes, Yellow for speed bumps
-            color = (73, 73, 255) if obj.class_name == "pothole" else (0, 206, 245)
-            thickness = 2
-            
-            # Highlight warning if close
-            if obj.distance <= Config.ALERT_TRIGGER_DISTANCE:
-                thickness = 3
-                # Flash red HUD border around the entire canvas to indicate extreme threat!
-                cv2.rectangle(annotated, (0, 0), (Config.FRAME_WIDTH, Config.FRAME_HEIGHT), (73, 73, 255), 4)
+            # High-tech clean vector colors:
+            # Pothole: Crimson Red (73, 73, 255)
+            # Speed Bump: Vibrant Amber (0, 190, 255)
+            # Traffic Sign: Cyan (254, 200, 0)
+            if obj.class_name == "pothole":
+                color = (73, 73, 255)
+                label_type = "POTHOLE"
+            elif obj.class_name == "speed_bump":
+                color = (0, 190, 255)
+                label_type = "SPEED BUMP"
+            else:
+                color = (254, 200, 0)
+                label_type = "TRAFFIC SIGN"
                 
-            # Draw bbox
-            cv2.rectangle(annotated, (xmin, ymin), (xmax, ymax), color, thickness)
+            is_warning = obj.distance <= 25.0
+            line_thickness = 2 if is_warning else 1
             
-            # Label
-            lbl = f"{obj.class_name.upper()} #{obj.id} ({obj.distance:.1f}m)"
-            cv2.putText(annotated, lbl, (xmin, ymin - 6), font, 0.4, color, 1, cv2.LINE_AA)
+            # Flash subtle warning border if vehicle is dangerously close
+            if is_warning and obj.class_name == "pothole" and obj.distance <= 15.0:
+                cv2.rectangle(annotated, (0, 0), (Config.FRAME_WIDTH, Config.FRAME_HEIGHT), (73, 73, 255), 2)
+                
+            # Draw sleek thin bounding box
+            cv2.rectangle(annotated, (xmin, ymin), (xmax, ymax), color, line_thickness)
             
-        # Draw HUD overlays indicating "ANALYSIS MODE" and elapsed time
-        cv2.rectangle(annotated, (10, 10), (220, 45), (15, 20, 30), -1)
-        cv2.rectangle(annotated, (10, 10), (220, 45), (0, 242, 254), 1)
-        cv2.putText(annotated, "ANALYSIS: VIDEO UPLOAD", (20, 26), font, 0.35, (0, 242, 254), 1, cv2.LINE_AA)
-        cv2.putText(annotated, f"TIME: {timestamp_s:.2f}s | FRAME: {self.current_frame_idx}", (20, 38), font, 0.35, (180, 180, 180), 1, cv2.LINE_AA)
+            # Render text label with distance in meters and estimated Time-to-Collision (TTC) in seconds
+            if obj.distance <= 50.0:
+                # Assuming standard driving speed of 40 km/h (~11.1 m/s)
+                speed_mps = 11.1
+                ttc_seconds = round(obj.distance / speed_mps, 1)
+                
+                lbl = f"{label_type} • {obj.distance:.1f}m ({ttc_seconds}s TTC)"
+                text_size, _ = cv2.getTextSize(lbl, font, 0.35, 1)
+                
+                # Label positioning above box with boundary check
+                lbl_y = max(ymin - 4, text_size[1] + 6)
+                
+                # Dark semi-transparent background pill
+                cv2.rectangle(annotated, (xmin, lbl_y - text_size[1] - 4), (xmin + text_size[0] + 6, lbl_y + 2), (12, 16, 24), -1)
+                cv2.rectangle(annotated, (xmin, lbl_y - text_size[1] - 4), (xmin + text_size[0] + 6, lbl_y + 2), color, 1)
+                cv2.putText(annotated, lbl, (xmin + 3, lbl_y - 2), font, 0.35, (240, 240, 245), 1, cv2.LINE_AA)
+            
+        # Draw minimal top HUD bar
+        cv2.rectangle(annotated, (12, 12), (250, 42), (12, 16, 24), -1)
+        cv2.rectangle(annotated, (12, 12), (250, 42), (0, 242, 254), 1)
+        cv2.putText(annotated, "VISION AI: DISTANCE & TTC ACTIVE", (22, 26), font, 0.34, (0, 242, 254), 1, cv2.LINE_AA)
+        cv2.putText(annotated, f"TIME: {timestamp_s:.2f}s | DETECTIONS: {len(objects)}", (22, 36), font, 0.32, (180, 180, 180), 1, cv2.LINE_AA)
         
-        # Warn if alert is active
-        active_warnings = [o for o in tracked_objects if o.distance <= Config.ALERT_TRIGGER_DISTANCE]
-        if active_warnings:
-            warn = active_warnings[0]
-            w_text = f"WARNING: {warn.class_name.upper()} DETECTED AHEAD!"
-            cv2.rectangle(annotated, (Config.FRAME_WIDTH//2 - 160, Config.FRAME_HEIGHT - 45), 
-                          (Config.FRAME_WIDTH//2 + 160, Config.FRAME_HEIGHT - 15), (15, 20, 30), -1)
-            cv2.rectangle(annotated, (Config.FRAME_WIDTH//2 - 160, Config.FRAME_HEIGHT - 45), 
-                          (Config.FRAME_WIDTH//2 + 160, Config.FRAME_HEIGHT - 15), (73, 73, 255), 1)
-            cv2.putText(annotated, w_text, (Config.FRAME_WIDTH//2 - 145, Config.FRAME_HEIGHT - 25), font, 0.4, (73, 73, 255), 1, cv2.LINE_AA)
+        # Display subtle warning toast only when critical threat within 25m
+        critical_warnings = [o for o in objects if o.distance <= 25.0]
+        if critical_warnings:
+            warn = critical_warnings[-1] # Closest object
+            speed_mps = 11.1
+            ttc = round(warn.distance / speed_mps, 1)
+            w_text = f"CRITICAL WARNING: {warn.class_name.upper()} IN {warn.distance:.1f}m ({ttc}s TTC)"
+            
+            w_box_w = 320
+            w_x1 = Config.FRAME_WIDTH // 2 - w_box_w // 2
+            w_x2 = Config.FRAME_WIDTH // 2 + w_box_w // 2
+            w_y1 = Config.FRAME_HEIGHT - 40
+            w_y2 = Config.FRAME_HEIGHT - 12
+            
+            cv2.rectangle(annotated, (w_x1, w_y1), (w_x2, w_y2), (12, 16, 24), -1)
+            cv2.rectangle(annotated, (w_x1, w_y1), (w_x2, w_y2), (73, 73, 255), 1)
+            cv2.putText(annotated, w_text, (w_x1 + 15, w_y1 + 19), font, 0.38, (73, 73, 255), 1, cv2.LINE_AA)
             
         return annotated

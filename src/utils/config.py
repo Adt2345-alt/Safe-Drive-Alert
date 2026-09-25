@@ -39,7 +39,7 @@ class Config:
     EGO_LANE_HALF_WIDTH_PX = 140     # Lane corridor width in image space
 
     # Alert System Settings
-    ALERT_TRIGGER_DISTANCE = 15.0  # meters (critical distance to trigger alert)
+    ALERT_TRIGGER_DISTANCE = 60.0  # meters (long-range critical distance to trigger alert)
     COOLDOWN_PERIOD_SECONDS = 3.0  # prevent spamming alerts for the same physical object
 
     # GPS Parameters

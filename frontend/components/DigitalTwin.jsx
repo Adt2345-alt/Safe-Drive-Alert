@@ -113,6 +113,41 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
     }
   }, [compareMode, defectData]);
 
+  // Helper to generate procedural asphalt texture
+  const createAsphaltTexture = (THREE) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#22262e';
+    ctx.fillRect(0, 0, 512, 512);
+
+    for (let i = 0; i < 35000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const shade = Math.floor(Math.random() * 50) + 15;
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 25; i++) {
+      ctx.beginPath();
+      const y = Math.random() * 512;
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y + (Math.random() * 12 - 6));
+      ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(4, 8);
+    return texture;
+  };
+
   // 3. Setup Three.js 3D Scene
   useEffect(() => {
     if (!mountRef.current || !window.THREE) return;
@@ -121,12 +156,12 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
     const height = mountRef.current.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x070a12);
-    scene.fog = new THREE.FogExp2(0x070a12, 0.025);
+    scene.background = new THREE.Color(0x0a0e17);
+    scene.fog = new THREE.FogExp2(0x0a0e17, 0.02);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 9, 14);
+    camera.position.set(3.2, 3.0, 4.2);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -141,64 +176,109 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
       controls = new window.THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
-      controls.maxPolarAngle = Math.PI / 2 - 0.05;
-      controls.target.set(0, -0.2, 0);
+      controls.maxPolarAngle = Math.PI / 2 - 0.02;
+      controls.minDistance = 1.0;
+      controls.maxDistance = 25.0;
       controlsRef.current = controls;
     }
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0x556070, 0.4);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    sunLight.position.set(15, 30, 20);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.3);
+    sunLight.position.set(12, 22, 15);
     sunLight.castShadow = true;
     scene.add(sunLight);
 
-    const cyanSpot = new THREE.SpotLight(0x00f2fe, 1.5, 40, Math.PI / 4, 0.5);
-    cyanSpot.position.set(-10, 20, 10);
+    const cyanSpot = new THREE.SpotLight(0x00f2fe, 1.8, 30, Math.PI / 4, 0.5);
+    cyanSpot.position.set(-8, 15, 8);
     scene.add(cyanSpot);
 
-    const grid = new THREE.GridHelper(60, 30, 0x00f2fe, 0x1e293b);
-    grid.position.y = -0.1;
-    scene.add(grid);
-
-    // Road mesh
-    const depthCm = defectData ? (defectData.depth_cm || 6.0) : 6.0;
-    const widthCm = defectData ? (defectData.width_cm || 36.0) : 36.0;
+    const depthCm = defectData ? (defectData.depth_cm || 6.5) : 6.5;
+    const widthCm = defectData ? (defectData.width_cm || 32.5) : 32.5;
     const lengthCm = defectData ? (defectData.length_cm || 48.0) : 48.0;
+    const defectType = (defectData ? (defectData.type || defectData.defect_type || 'pothole') : 'pothole').toLowerCase();
 
     const depthM = depthCm / 100.0;
     const widthM = widthCm / 100.0;
     const lengthM = lengthCm / 100.0;
 
-    const roadGeo = new THREE.PlaneGeometry(16, 30, 100, 100);
-    roadGeo.rotateX(-Math.PI / 2);
-
-    if (defectData) {
-      const pos = roadGeo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const z = pos.getZ(i);
-
-        const rx = x / (widthM * 0.7);
-        const rz = z / (lengthM * 0.7);
-        const distSq = rx * rx + rz * rz;
-
-        if (distSq < 1.0) {
-          const falloff = Math.cos((Math.sqrt(distSq) * Math.PI) / 2);
-          const organicNoise = Math.sin(x * 20) * Math.cos(z * 20) * 0.15 + 0.85;
-          const disp = depthM * falloff * organicNoise;
-          pos.setY(i, -disp);
-        }
-      }
-      roadGeo.computeVertexNormals();
+    if (controls) {
+      controls.target.set(0, 0, 0);
+      controls.update();
     }
 
+    const roadGeo = new THREE.PlaneGeometry(12, 20, 140, 140);
+    roadGeo.rotateX(-Math.PI / 2);
+
+    const pos = roadGeo.attributes.position;
+    const colors = [];
+
+    const asphaltColor = new THREE.Color(0x2c323f);
+    const darkPitColor = new THREE.Color(0x08090b);
+    const yellowStripeColor = new THREE.Color(0xeab308);
+
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+
+      let dispY = 0.0;
+      let colorVal = asphaltColor.clone();
+
+      if (defectType === 'crack') {
+        const crackPathX = 0.35 * Math.sin(z * 1.8) + 0.15 * Math.cos(z * 4.2);
+        const distToCrack = Math.abs(x - crackPathX);
+        const crackLengthLimit = lengthM * 0.8;
+
+        if (Math.abs(z) < crackLengthLimit) {
+          const zFalloff = Math.cos((z / crackLengthLimit) * (Math.PI / 2));
+          const crackWidth = Math.max(0.04, widthM * 0.35);
+          
+          if (distToCrack < crackWidth) {
+            const factor = 1.0 - (distToCrack / crackWidth);
+            dispY = -depthM * Math.pow(factor, 1.2) * zFalloff;
+            colorVal.lerp(darkPitColor, Math.pow(factor, 0.7));
+          }
+        }
+      } else if (defectType === 'speedbump' || defectType === 'speed_bump') {
+        const rampLength = Math.max(0.8, lengthM * 1.2);
+        if (Math.abs(z) < rampLength && Math.abs(x) < 4.5) {
+          const zFactor = Math.cos((z / rampLength) * (Math.PI / 2));
+          dispY = Math.max(0.06, depthM * 0.8) * Math.pow(zFactor, 1.5);
+          
+          if (Math.sin(x * 6.0 + z * 3.0) > 0.1) {
+            colorVal.lerp(yellowStripeColor, 0.85);
+          }
+        }
+      } else {
+        const rx = x / Math.max(0.2, widthM * 0.65);
+        const rz = z / Math.max(0.2, lengthM * 0.65);
+        const dist = Math.sqrt(rx * rx + rz * rz);
+
+        if (dist < 1.0) {
+          const falloff = Math.cos(dist * Math.PI / 2);
+          const angle = Math.atan2(z, x);
+          const noise = 0.80 + 0.38 * (Math.sin(angle * 5 + x * 9) * Math.cos(z * 9));
+          dispY = -depthM * Math.pow(falloff, 1.3) * noise;
+          colorVal.lerp(darkPitColor, Math.pow(falloff, 0.75));
+        }
+      }
+
+      pos.setY(i, dispY);
+      colors.push(colorVal.r, colorVal.g, colorVal.b);
+    }
+
+    roadGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    roadGeo.computeVertexNormals();
+
+    const asphaltTexture = createAsphaltTexture(THREE);
     const roadMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.88,
-      metalness: 0.12
+      map: asphaltTexture,
+      vertexColors: true,
+      roughness: 0.75,
+      metalness: 0.20
     });
+
     const roadMesh = new THREE.Mesh(roadGeo, roadMat);
     roadMesh.receiveShadow = true;
     scene.add(roadMesh);
@@ -383,9 +463,11 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '20px' }}>💎</span>
             <div>
-              <h3 style={styles.title}>3D DIGITAL TWIN INSPECTION TOOL</h3>
+              <h3 style={styles.title}>
+                3D RECONSTRUCTION — DEFECT #{defectData ? (defectData.formatted_id || defectData.id) : ''}
+              </h3>
               <p style={styles.subtitle}>
-                3D Procedural Telemetry View (From Recorded Detection Database)
+                Real-time 3D Mesh Displaced Depth Analysis — {defectData ? (defectData.corridor || 'Recorded Route Corridor') : 'Road Segment'}
               </p>
             </div>
           </div>
