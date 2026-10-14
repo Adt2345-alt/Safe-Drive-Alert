@@ -11,12 +11,25 @@ class DepthEstimator:
     def __init__(self, use_gpu=False):
         self.use_gpu = use_gpu
         self.model_loaded = False
+        self._cached_shape = None
+        self._cached_depth_base = None
         self._init_depth_model()
 
     def _init_depth_model(self):
         """Initializes depth model backend."""
-        # Simulated fast edge depth estimation pipeline based on vertical road floor perspective & gradient intensity
         self.model_loaded = True
+
+    def _get_depth_base(self, h, w):
+        if self._cached_shape == (h, w) and self._cached_depth_base is not None:
+            return self._cached_depth_base
+            
+        y_coords, x_coords = np.mgrid[0:h, 0:w]
+        horizon_y = h * 0.40
+        dy = np.maximum(1.0, y_coords - horizon_y)
+        depth_base = (dy / (h - horizon_y)) ** 1.8
+        self._cached_depth_base = np.clip(depth_base, 0.0, 1.0).astype(np.float32)
+        self._cached_shape = (h, w)
+        return self._cached_depth_base
 
     def estimate_depth_map(self, frame):
         """
@@ -29,28 +42,22 @@ class DepthEstimator:
             return np.zeros((480, 640), dtype=np.float32)
 
         h, w, _ = frame.shape
-        
-        # 1. Perspective Depth Gradient Base (Ground floor depth increases quadratically from horizon to bottom)
-        y_coords, x_coords = np.mgrid[0:h, 0:w]
-        horizon_y = h * 0.40
-        
-        # Distance relative to horizon
-        dy = np.maximum(1.0, y_coords - horizon_y)
-        
-        # Normalized relative inverse depth: close to 1.0 near bottom, near 0.0 at horizon
-        depth_base = (dy / (h - horizon_y)) ** 1.8
-        depth_base = np.clip(depth_base, 0.0, 1.0).astype(np.float32)
+        depth_base = self._get_depth_base(h, w)
 
-        # 2. Extract luminance/contrast structures to capture road object relief
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (9, 9), 0)
+        # 2. Fast downsampled luminance edge extraction (half resolution for speed)
+        proc_w, proc_h = w // 2, h // 2
+        small_frame = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_NEAREST)
+        gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
         grad_x = cv2.Sobel(blur, cv2.CV_32F, 1, 0, ksize=3)
         grad_y = cv2.Sobel(blur, cv2.CV_32F, 0, 1, ksize=3)
         edge_mag = cv2.magnitude(grad_x, grad_y)
         edge_norm = cv2.normalize(edge_mag, None, 0.0, 0.15, cv2.NORM_MINMAX)
+        
+        edge_upscaled = cv2.resize(edge_norm, (w, h), interpolation=cv2.INTER_LINEAR)
 
         # Combined relative depth map
-        depth_map = np.clip(depth_base + edge_norm, 0.0, 1.0)
+        depth_map = np.clip(depth_base + edge_upscaled, 0.0, 1.0)
         return depth_map
 
     def get_bbox_depth_median(self, depth_map, bbox):
@@ -82,7 +89,6 @@ class DepthEstimator:
 
         # Scale 0.0-1.0 to 0-255 uint8
         depth_uint8 = (np.clip(depth_map, 0.0, 1.0) * 255.0).astype(np.uint8)
-        
-        # Apply TURBO color map
         heatmap = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_TURBO)
         return heatmap
+

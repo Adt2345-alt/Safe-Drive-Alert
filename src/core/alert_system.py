@@ -20,11 +20,25 @@ class AlertSystem:
         self.active_alert = None
         self.last_alert_time = 0.0
         self.cooldown = Config.COOLDOWN_PERIOD_SECONDS
+        self.alerted_ids = set()
+        self.recent_spatial_alerts = [] # list of (lat, lon, timestamp)
         
+    def _is_spatially_close(self, lat, lon, now, max_dist_m=15.0, time_window=4.0):
+        # Prune old spatial entries
+        self.recent_spatial_alerts = [entry for entry in self.recent_spatial_alerts if now - entry[2] < time_window]
+        for prev_lat, prev_lon, _ in self.recent_spatial_alerts:
+            # Approx distance check: 1 deg lat ~= 111000m
+            d_lat = (lat - prev_lat) * 111000.0
+            d_lon = (lon - prev_lon) * 111000.0 * 0.98
+            dist = (d_lat**2 + d_lon**2)**0.5
+            if dist < max_dist_m:
+                return True
+        return False
+
     def check_alerts(self, tracked_objects, current_telemetry):
         """
         Scans tracked objects to see if any are within the critical distance
-        and haven't had an alert triggered yet.
+        and haven't had an alert triggered yet. Deduplicates alerts spatially and temporally.
         """
         now = time.time()
         
@@ -34,24 +48,42 @@ class AlertSystem:
 
         new_alert = None
 
-        for obj in tracked_objects:
-            # Trigger alert when object is within trigger distance and has not been alerted
-            if obj.distance <= self.trigger_distance and not obj.alert_triggered:
-                # Set alert triggered
+        # Sort tracked objects by distance so the closest critical obstacle gets priority
+        sorted_objs = sorted(tracked_objects, key=lambda o: o.distance)
+
+        for obj in sorted_objs:
+            if obj.id in self.alerted_ids:
                 obj.alert_triggered = True
-                
-                # Check cooldown to prevent duplicate noise
-                if now - self.last_alert_time < 0.5:
-                    continue
-                
-                # Determine alert properties
-                alert_type = obj.class_name
-                severity = getattr(obj, "severity", "High") or "High"
+                continue
+
+            # Check if object is within trigger distance
+            if obj.distance <= self.trigger_distance and not obj.alert_triggered:
                 lat, lon = obj.gps
                 if (lat == 0.0 and lon == 0.0) or not lat or not lon:
                     lat = current_telemetry.get("latitude", 12.9716)
                     lon = current_telemetry.get("longitude", 77.5946)
-                speed = current_telemetry["speed_kmh"]
+
+                # Deduplicate spatially: if a nearby physical obstacle was alerted within 4s, suppress
+                if self._is_spatially_close(lat, lon, now, max_dist_m=15.0, time_window=4.0):
+                    obj.alert_triggered = True
+                    self.alerted_ids.add(obj.id)
+                    continue
+
+                # Check cooldown to prevent duplicate alert spamming
+                if now - self.last_alert_time < self.cooldown:
+                    continue
+
+                # Set alert triggered
+                obj.alert_triggered = True
+                self.alerted_ids.add(obj.id)
+                self.recent_spatial_alerts.append((lat, lon, now))
+                
+                # Determine alert properties
+                alert_type = obj.class_name
+                severity = getattr(obj, "severity", "High") or "High"
+                speed = current_telemetry.get("speed_kmh", 40.0)
+                lane_pos = getattr(obj, "lane_position", "YOUR LANE")
+                ttc_val = getattr(obj, "ttc_sec", 2.0)
                 
                 self.last_alert_time = now
                 self.active_alert = {
@@ -62,6 +94,8 @@ class AlertSystem:
                     "latitude": lat,
                     "longitude": lon,
                     "bbox": obj.bbox,
+                    "lane_position": lane_pos,
+                    "ttc_sec": ttc_val,
                     "timestamp": now
                 }
 
@@ -108,6 +142,7 @@ class AlertSystem:
                 
                 # Trigger server-side audio notification in background thread
                 threading.Thread(target=self._play_alert_sound, args=(alert_type, severity), daemon=True).start()
+                break # Only trigger 1 active alert per scan cycle
 
         return new_alert
 

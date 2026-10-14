@@ -73,13 +73,12 @@ class LaneDetector:
         pt3 = (int(w * 0.88), h)
         pt4 = (int(w * 0.12), h)
 
-        pts = np.array([pt1, pt2, pt3, pt4], np.int32)
-        pts = pts.reshape((-1, 1, 2))
+        pts = np.array([[pt1, pt2, pt3, pt4]], np.int32)
 
-        # Fill corridor with translucent neon cyan mask
-        overlay = annotated.copy()
-        cv2.fillPoly(overlay, [pts], (254, 242, 0)) # BGR Cyan
-        cv2.addWeighted(overlay, 0.15, annotated, 0.85, 0, annotated)
+        # Translucent overlay blend
+        mask = np.zeros_like(annotated)
+        cv2.fillPoly(mask, pts, (254, 242, 0))
+        cv2.addWeighted(mask, 0.15, annotated, 1.0, 0, annotated)
 
         # Draw left & right lane boundaries
         cv2.polylines(annotated, [np.array([pt4, pt1])], False, (254, 242, 0), 2, cv2.LINE_AA)

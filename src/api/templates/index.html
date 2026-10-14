@@ -611,6 +611,8 @@
             <button class="tab-btn" id="tab-map" onclick="window.location.href='/map'" style="display:none;">HD Map View</button>
             <button class="tab-btn" id="tab-analytics" onclick="switchMode('analytics')" style="display:none;">Analytics & Budgets</button>
             <button class="tab-btn" id="tab-workorders" onclick="switchMode('workorders')" style="display:none;">Work Assignments</button>
+            <button class="tab-btn" id="tab-fleet" onclick="window.location.href='/fleet'" style="display:none;">Multi-Vehicle Fleet</button>
+            <button class="tab-btn" id="tab-routeadvisor" onclick="window.location.href='/route-advisor'" style="display:none;">Route Advisor</button>
             <button class="tab-btn" id="tab-users" onclick="switchMode('users')" style="display:none;">User Directory</button>
             <button class="tab-btn" id="tab-logs" onclick="switchMode('logs')" style="display:none;">System Audit Logs</button>
         </div>
@@ -1148,6 +1150,8 @@
                 document.getElementById("tab-workorders").style.display = "block";
                 loadWorkOrders();
             }
+            if (document.getElementById("tab-fleet")) document.getElementById("tab-fleet").style.display = "block";
+            if (document.getElementById("tab-routeadvisor")) document.getElementById("tab-routeadvisor").style.display = "block";
             if (p.includes("manage_users")) {
                 document.getElementById("tab-users").style.display = "block";
                 document.getElementById("tab-logs").style.display = "block";
@@ -1284,6 +1288,9 @@
             }
         }
 
+        var lastAudioAlertTime = 0;
+        var lastAudioAlertLoc = [0, 0];
+
         function playVoiceAlert(text) {
             if (!masterSoundEnabled || !audioEnabled || !speechSynth) return;
             try {
@@ -1341,10 +1348,14 @@
                     var carLatLng = [data.telemetry.latitude, data.telemetry.longitude];
                     if (!carMarker) {
                         carMarker = L.marker(carLatLng, {icon: carIcon}).addTo(map);
+                        map.panTo(carLatLng, {animate: false});
                     } else {
+                        var prevPos = carMarker.getLatLng();
                         carMarker.setLatLng(carLatLng);
+                        if (getDistanceMeters(prevPos.lat, prevPos.lng, carLatLng[0], carLatLng[1]) > 2.0) {
+                            map.panTo(carLatLng, {animate: false});
+                        }
                     }
-                    map.panTo(carLatLng, {animate: true, duration: 0.4});
 
                     if (!routePolyline && data.route_points && data.route_points.length > 0) {
                         routePolyline = L.polyline(data.route_points, {
@@ -1513,20 +1524,30 @@
                 }
 
                 var alertKey = alert.id + "_" + alert.type;
+                var nowMs = Date.now();
+                
                 if (!recentDetections.has(alertKey)) {
                     recentDetections.add(alertKey);
                     if (recentDetections.size > 20) {
                         recentDetections.delete(recentDetections.values().next().value);
                     }
 
+                    // Enforce 2.5s minimum gap between audio/speech cues to prevent double/overlapping alerts
+                    if (nowMs - lastAudioAlertTime > 2500) {
+                        lastAudioAlertTime = nowMs;
+                        if (alert.type === 'pothole') {
+                            playWebBeep(900, 0.15);
+                            setTimeout(() => playWebBeep(900, 0.15), 180);
+                            playVoiceAlert(`Caution. Pothole ahead ${dirText.toLowerCase()}.`);
+                        } else if (alert.type === 'speed_bump') {
+                            playWebBeep(500, 0.2);
+                            playVoiceAlert("Speed bump");
+                        }
+                    }
+                    
                     if (alert.type === 'pothole') {
-                        playWebBeep(900, 0.15);
-                        setTimeout(() => playWebBeep(900, 0.15), 180);
-                        playVoiceAlert(`Caution. Pothole ahead ${dirText.toLowerCase()}.`);
                         logToPanel("pothole", `CRITICAL: Pothole detected ${dirText.toLowerCase()} at [${alert.latitude.toFixed(5)}, ${alert.longitude.toFixed(5)}]`);
                     } else if (alert.type === 'speed_bump') {
-                        playWebBeep(500, 0.2);
-                        playVoiceAlert("Speed bump");
                         logToPanel("speed_bump", `INFO: Speed bump detected at [${alert.latitude.toFixed(5)}, ${alert.longitude.toFixed(5)}]`);
                     }
                 }

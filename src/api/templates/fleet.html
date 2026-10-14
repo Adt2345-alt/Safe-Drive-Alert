@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeDrive AI - Multi-Vehicle Fleet Telemetry</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS & JS for Live Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- MapLibre GL JS & Leaflet MapLibre Plugin for OpenFreeMap -->
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
+
+    <!-- React 18 & ReactDOM CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0B0F19;
+            --panel-bg: rgba(11, 15, 25, 0.9);
+            --cyan: #00F2FE;
+            --yellow: #eab308;
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --green: #10b981;
+            --blue: #3b82f6;
+            --text-main: #E5E7EB;
+            --text-dim: #9CA3AF;
+            --font-display: 'Orbitron', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Top Header Nav */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 24px;
+            border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+            background: rgba(11, 15, 25, 0.95);
+            z-index: 1000;
+            height: 56px;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        .header .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .header .brand-text {
+            font-family: var(--font-display);
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: var(--cyan);
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            text-transform: uppercase;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab-btn {
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            color: var(--text-dim);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-family: var(--font-display);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .tab-btn:hover {
+            border-color: var(--cyan);
+            color: var(--text-main);
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+            font-weight: bold;
+        }
+
+        #app-root {
+            margin-top: 68px;
+            padding: 24px;
+            max-width: 1600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Pulse Animation */
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Leaflet Dark Custom Popup */
+        .leaflet-popup-content-wrapper {
+            background: rgba(11, 15, 25, 0.95) !important;
+            border: 1px solid var(--cyan) !important;
+            color: var(--text-main) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.8) !important;
+        }
+        .leaflet-popup-tip {
+            background: var(--cyan) !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header Navigation Bar -->
+    <div class="header">
+        <div class="brand-title" onclick="window.location.href='/'">
+            <span class="brand-text">SafeDrive AI</span>
+        </div>
+
+        <div class="nav-tabs">
+            <a href="/" class="tab-btn">Simulation Drive</a>
+            <a href="/map" class="tab-btn">HD Map View</a>
+            <a href="/work-orders" class="tab-btn">Work Orders</a>
+            <a href="/fleet" class="tab-btn active">Multi-Vehicle Fleet</a>
+            <a href="/route-advisor" class="tab-btn">Route Advisor</a>
+            <a href="/analytics" class="tab-btn">Analytics</a>
+            <a href="/predictive-hotspots" class="tab-btn">Predictive Hotspot Detection</a>
+        </div>
+
+        <div>
+            <a href="/logout" class="tab-btn" style="border-color: var(--red); color: var(--red);">LOGOUT</a>
+        </div>
+    </div>
+
+    <!-- React App Root Container -->
+    <div id="app-root"></div>
+
+    <!-- JSX React Application -->
+    {% raw %}
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function MultiVehicleFleetApp() {
+            const [vehicles, setVehicles] = useState([]);
+            const [coverage, setCoverage] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [selectedVehicle, setSelectedVehicle] = useState(null);
+            const [selectedVehicleDetail, setSelectedVehicleDetail] = useState(null);
+            const [loadingDetail, setLoadingDetail] = useState(false);
+            const [statusFilter, setStatusFilter] = useState('ALL');
+            const [searchQuery, setSearchQuery] = useState('');
+
+            const mapRef = useRef(null);
+            const mapInstanceRef = useRef(null);
+            const markersRef = useRef({});
+            const polylineRef = useRef(null);
+
+            // 1. Fetch Fleet Vehicles & Coverage Data
+            const fetchData = () => {
+                setLoading(true);
+                Promise.all([
+                    fetch('/api/fleet/vehicles').then(r => r.json()),
+                    fetch('/api/fleet/coverage?days=7').then(r => r.json())
+                ]).then(([vData, cData]) => {
+                    if (vData.vehicles) setVehicles(vData.vehicles);
+                    if (cData) setCoverage(cData);
+                    setLoading(false);
+                }).catch(err => {
+                    console.error("Error loading fleet data:", err);
+                    setLoading(false);
+                });
+            };
+
+            useEffect(() => {
+                fetchData();
+                const interval = setInterval(fetchData, 15000);
+                return () => clearInterval(interval);
+            }, []);
+
+            // 2. Initialize Leaflet Map
+            useEffect(() => {
+                if (!mapRef.current || mapInstanceRef.current) return;
+
+                const map = L.map(mapRef.current, {
+                    center: [12.9716, 77.5946],
+                    zoom: 12,
+                    zoomControl: false
+                });
+
+                L.control.zoom({ position: 'topright' }).addTo(map);
+
+                if (window.L && window.L.maplibreGL) {
+                    L.maplibreGL({
+                        style: 'https://tiles.openfreemap.org/styles/dark'
+                    }).addTo(map);
+                } else {
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap',
+                        maxZoom: 19
+                    }).addTo(map);
+                }
+
+                mapInstanceRef.current = map;
+
+                return () => {
+                    if (mapInstanceRef.current) {
+                        mapInstanceRef.current.remove();
+                        mapInstanceRef.current = null;
+                    }
+                };
+            }, []);
+
+            // 3. Update Vehicle Markers on Map
+            useEffect(() => {
+                if (!mapInstanceRef.current || vehicles.length === 0) return;
+                const map = mapInstanceRef.current;
+
+                // Remove existing markers
+                Object.values(markersRef.current).forEach(m => m.remove());
+                markersRef.current = {};
+
+                vehicles.forEach(v => {
+                    const isActive = v.status.toLowerCase() === 'active';
+                    const isSelected = selectedVehicle && selectedVehicle.id === v.id;
+                    const color = isActive ? '#10b981' : '#f59e0b';
+
+                    const iconHtml = `
+                        <div style="
+                            width: ${isSelected ? '24px' : '18px'};
+                            height: ${isSelected ? '24px' : '18px'};
+                            background-color: ${color};
+                            border: 2px solid ${isSelected ? '#00F2FE' : '#ffffff'};
+                            border-radius: 50%;
+                            box-shadow: 0 0 ${isSelected ? '16px #00F2FE' : '8px ' + color};
+                            cursor: pointer;
+                            transition: all 0.2s ease;
+                            ${isActive ? 'animation: pulse-green 2s infinite;' : ''}
+                        "></div>
+                    `;
+
+                    const customIcon = L.divIcon({
+                        html: iconHtml,
+                        className: 'custom-vehicle-marker',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+
+                    const popupContent = `
+                        <div style="font-family: Inter, sans-serif; font-size: 11px;">
+                            <div style="font-family: Orbitron; color: #00F2FE; font-weight: bold; font-size: 12px; margin-bottom: 4px;">
+                                🚚 ${v.id} — ${v.driver_name}
+                            </div>
+                            <div><b>Model:</b> ${v.model}</div>
+                            <div><b>Status:</b> <span style="color: ${color}; font-weight: bold;">${v.status.toUpperCase()}</span></div>
+                            <div><b>Corridor:</b> ${v.current_road}</div>
+                            <div><b>Defects Logged:</b> ${v.defects_detected}</div>
+                            <div style="color: #9CA3AF; font-size: 10px; margin-top: 4px;">Last Ping: ${v.last_ping_formatted}</div>
+                        </div>
+                    `;
+
+                    const marker = L.marker([v.current_lat, v.current_lng], { icon: customIcon })
+                        .bindPopup(popupContent)
+                        .addTo(map);
+
+                    marker.on('click', () => {
+                        handleSelectVehicle(v);
+                    });
+
+                    markersRef.current[v.id] = marker;
+                });
+            }, [vehicles, selectedVehicle]);
+
+            // 4. Handle Vehicle Selection & Fetch Telemetry Detail
+            const handleSelectVehicle = (veh) => {
+                setSelectedVehicle(veh);
+                setLoadingDetail(true);
+
+                if (mapInstanceRef.current) {
+                    mapInstanceRef.current.panTo([veh.current_lat, veh.current_lng], { animate: true, duration: 0.8 });
+                }
+
+                fetch(`/api/fleet/vehicles/${veh.id}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.vehicle) {
+                            setSelectedVehicleDetail(data.vehicle);
+
+                            // Draw route polyline if points exist
+                            if (mapInstanceRef.current && data.vehicle.route && data.vehicle.route.length > 0) {
+                                if (polylineRef.current) {
+                                    polylineRef.current.remove();
+                                }
+                                const latLngs = data.vehicle.route.map(pt => [pt.lat, pt.lng]);
+                                polylineRef.current = L.polyline(latLngs, {
+                                    color: '#00F2FE',
+                                    weight: 3,
+                                    dashArray: '5, 8',
+                                    opacity: 0.8
+                                }).addTo(mapInstanceRef.current);
+                            }
+                        }
+                        setLoadingDetail(false);
+                    })
+                    .catch(err => {
+                        console.error("Error fetching vehicle detail:", err);
+                        setLoadingDetail(false);
+                    });
+            };
+
+            // Filtered vehicles list
+            const filteredVehicles = vehicles.filter(v => {
+                if (statusFilter !== 'ALL' && v.status.toLowerCase() !== statusFilter.toLowerCase()) return false;
+                if (searchQuery.trim() !== '') {
+                    const q = searchQuery.toLowerCase();
+                    const matchId = v.id.toLowerCase().includes(q);
+                    const matchDriver = v.driver_name.toLowerCase().includes(q);
+                    const matchModel = v.model.toLowerCase().includes(q);
+                    const matchRoad = v.current_road ? v.current_road.toLowerCase().includes(q) : false;
+                    if (!matchId && !matchDriver && !matchModel && !matchRoad) return false;
+                }
+                return true;
+            });
+
+            const activeVehiclesCount = vehicles.filter(v => v.status.toLowerCase() === 'active').length;
+            const offlineVehiclesCount = vehicles.filter(v => v.status.toLowerCase() === 'offline').length;
+            const totalDefectsCount = vehicles.reduce((sum, v) => sum + (v.defects_detected || 0), 0);
+
+            return (
+                <div>
+                    {/* TOP KPI SUMMARY CARDS */}
+                    <div style={styles.kpiGrid}>
+                        <div style={styles.kpiCard}>
+                            <div style={styles.kpiHeader}>ACTIVE FLEET UNITS</div>
+                            <div style={{ ...styles.kpiValue, color: '#10b981' }}>
+                                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', display: 'inline-block', marginRight: '8px', boxShadow: '0 0 10px #10b981' }}></span>
+                                {activeVehiclesCount} / {vehicles.length}
+                            </div>
+                            <div style={styles.kpiMeta}>15 Active Units Operational</div>
+                        </div>
+
+                        <div style={styles.kpiCard}>
+                            <div style={styles.kpiHeader}>TOTAL MONITORED FLEET</div>
+                            <div style={{ ...styles.kpiValue, color: '#00F2FE' }}>
+                                {vehicles.length} Units
+                            </div>
+                            <div style={styles.kpiMeta}>100% Autonomous Telemetry Tracking</div>
+                        </div>
+
+                        <div style={styles.kpiCard}>
+                            <div style={styles.kpiHeader}>7-DAY ROAD COVERAGE</div>
+                            <div style={{ ...styles.kpiValue, color: '#eab308' }}>
+                                {coverage ? `${coverage.coverage_percentage}%` : '86.7%'}
+                            </div>
+                            <div style={styles.kpiMeta}>{coverage ? `${coverage.covered_corridors} / ${coverage.total_corridors} Corridors Scanned` : '13 / 15 Corridors Scanned'}</div>
+                        </div>
+
+                        <div style={styles.kpiCard}>
+                            <div style={styles.kpiHeader}>TOTAL DEFECTS DETECTED</div>
+                            <div style={{ ...styles.kpiValue, color: '#f59e0b' }}>
+                                {totalDefectsCount.toLocaleString()}
+                            </div>
+                            <div style={styles.kpiMeta}>Assigned across 20 patrol units</div>
+                        </div>
+                    </div>
+
+                    {/* MAIN TWO-COLUMN LAYOUT */}
+                    <div style={styles.mainLayout}>
+                        {/* LEFT COLUMN: LIVE MAP & VEHICLE TABLE */}
+                        <div style={{ flex: '1', display: 'flex', flexDirection: 'column', gap: '20px', minWidth: '0' }}>
+                            {/* LIVE FLEET MAP */}
+                            <div style={styles.panelCard}>
+                                <div style={styles.panelHeader}>
+                                    <h3 style={styles.panelTitle}>📡 LIVE FLEET POSITIONING & PATROL MAP</h3>
+                                    <span style={{ fontSize: '11px', color: '#10b981', fontFamily: 'Orbitron' }}>● REAL-TIME TELEMETRY</span>
+                                </div>
+                                <div ref={mapRef} style={{ width: '100%', height: '360px', borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(0, 242, 254, 0.3)' }} />
+                            </div>
+
+                            {/* VEHICLE TABLE */}
+                            <div style={styles.panelCard}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button
+                                            onClick={() => setStatusFilter('ALL')}
+                                            style={{ ...styles.filterTab, borderColor: statusFilter === 'ALL' ? '#00F2FE' : 'rgba(0,242,254,0.2)', color: statusFilter === 'ALL' ? '#00F2FE' : '#9CA3AF', background: statusFilter === 'ALL' ? 'rgba(0,242,254,0.15)' : 'transparent' }}
+                                        >
+                                            ALL ({vehicles.length})
+                                        </button>
+                                        <button
+                                            onClick={() => setStatusFilter('ACTIVE')}
+                                            style={{ ...styles.filterTab, borderColor: statusFilter === 'ACTIVE' ? '#10b981' : 'rgba(0,242,254,0.2)', color: statusFilter === 'ACTIVE' ? '#10b981' : '#9CA3AF', background: statusFilter === 'ACTIVE' ? 'rgba(16,185,129,0.15)' : 'transparent' }}
+                                        >
+                                            ACTIVE ({activeVehiclesCount})
+                                        </button>
+                                        <button
+                                            onClick={() => setStatusFilter('OFFLINE')}
+                                            style={{ ...styles.filterTab, borderColor: statusFilter === 'OFFLINE' ? '#f59e0b' : 'rgba(0,242,254,0.2)', color: statusFilter === 'OFFLINE' ? '#f59e0b' : '#9CA3AF', background: statusFilter === 'OFFLINE' ? 'rgba(245,158,11,0.15)' : 'transparent' }}
+                                        >
+                                            OFFLINE ({offlineVehiclesCount})
+                                        </button>
+                                    </div>
+
+                                    <div style={{ position: 'relative', width: '280px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Search driver, vehicle ID, model..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            style={styles.searchInput}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={styles.table}>
+                                        <thead>
+                                            <tr>
+                                                <th style={styles.th}>VEHICLE ID</th>
+                                                <th style={styles.th}>DRIVER NAME</th>
+                                                <th style={styles.th}>MODEL</th>
+                                                <th style={styles.th}>STATUS</th>
+                                                <th style={styles.th}>CURRENT CORRIDOR</th>
+                                                <th style={styles.th}>DEFECTS LOGGED</th>
+                                                <th style={styles.th}>LAST PING</th>
+                                                <th style={styles.th}>ACTION</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredVehicles.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="8" style={{ ...styles.td, textAlign: 'center', padding: '30px', color: '#9CA3AF' }}>
+                                                        No vehicle units matching current search or filter.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                filteredVehicles.map(v => {
+                                                    const isActive = v.status.toLowerCase() === 'active';
+                                                    const isSel = selectedVehicle && selectedVehicle.id === v.id;
+                                                    return (
+                                                        <tr
+                                                            key={v.id}
+                                                            onClick={() => handleSelectVehicle(v)}
+                                                            style={{
+                                                                ...styles.tr,
+                                                                backgroundColor: isSel ? 'rgba(0, 242, 254, 0.12)' : 'transparent',
+                                                                borderLeft: isSel ? '3px solid #00F2FE' : '3px solid transparent'
+                                                            }}
+                                                        >
+                                                            <td style={{ ...styles.td, fontFamily: 'Orbitron', fontWeight: 'bold', color: '#00F2FE' }}>{v.id}</td>
+                                                            <td style={{ ...styles.td, fontWeight: '600' }}>{v.driver_name}</td>
+                                                            <td style={{ ...styles.td, color: '#9CA3AF' }}>{v.model}</td>
+                                                            <td style={styles.td}>
+                                                                <span style={{
+                                                                    padding: '3px 10px',
+                                                                    borderRadius: '12px',
+                                                                    fontSize: '10px',
+                                                                    fontFamily: 'Orbitron',
+                                                                    fontWeight: 'bold',
+                                                                    background: isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                                                                    color: isActive ? '#10b981' : '#f59e0b',
+                                                                    border: `1px solid ${isActive ? '#10b981' : '#f59e0b'}`
+                                                                }}>
+                                                                    {v.status.toUpperCase()}
+                                                                </span>
+                                                            </td>
+                                                            <td style={styles.td}>{v.current_road}</td>
+                                                            <td style={{ ...styles.td, fontFamily: 'Orbitron', textAlign: 'center' }}>
+                                                                <span style={{ background: 'rgba(0,242,254,0.1)', color: '#00F2FE', padding: '2px 8px', borderRadius: '4px' }}>
+                                                                    {v.defects_detected}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ ...styles.td, fontSize: '11px', color: '#9CA3AF' }}>{v.last_ping_formatted}</td>
+                                                            <td style={styles.td}>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleSelectVehicle(v); }}
+                                                                    style={styles.inspectBtn}
+                                                                >
+                                                                    INSPECT UNIT
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RIGHT SIDE PANEL: DETAILED TELEMETRY DRAWER */}
+                        <div style={styles.sideDrawer}>
+                            {selectedVehicle ? (
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(0,242,254,0.2)', paddingBottom: '12px' }}>
+                                        <div>
+                                            <div style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '16px', fontWeight: 'bold' }}>
+                                                {selectedVehicle.id}
+                                            </div>
+                                            <div style={{ fontSize: '12px', color: '#E5E7EB', marginTop: '2px' }}>
+                                                Driver: <b>{selectedVehicle.driver_name}</b>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => { setSelectedVehicle(null); setSelectedVehicleDetail(null); if (polylineRef.current) polylineRef.current.remove(); }} style={styles.closeBtn}>✕</button>
+                                    </div>
+
+                                    {loadingDetail ? (
+                                        <div style={{ textAlign: 'center', padding: '40px 0', color: '#00F2FE' }}>
+                                            Loading vehicle telemetry & defect history...
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            {/* VEHICLE TELEMETRY METRICS GRID */}
+                                            <div style={styles.detailGrid}>
+                                                <div style={styles.detailItem}>
+                                                    <span style={styles.detailLabel}>Vehicle Model:</span>
+                                                    <b style={styles.detailVal}>{selectedVehicle.model}</b>
+                                                </div>
+                                                <div style={styles.detailItem}>
+                                                    <span style={styles.detailLabel}>Operational Status:</span>
+                                                    <b style={{ color: selectedVehicle.status.toLowerCase() === 'active' ? '#10b981' : '#f59e0b' }}>
+                                                        {selectedVehicle.status.toUpperCase()}
+                                                    </b>
+                                                </div>
+                                                <div style={styles.detailItem}>
+                                                    <span style={styles.detailLabel}>Current Patrol Road:</span>
+                                                    <b style={styles.detailVal}>{selectedVehicle.current_road}</b>
+                                                </div>
+                                                <div style={styles.detailItem}>
+                                                    <span style={styles.detailLabel}>GPS Coordinates:</span>
+                                                    <b style={styles.detailVal}>{selectedVehicle.current_lat.toFixed(4)}, {selectedVehicle.current_lng.toFixed(4)}</b>
+                                                </div>
+                                                <div style={styles.detailItem}>
+                                                    <span style={styles.detailLabel}>Total Logged Defects:</span>
+                                                    <b style={{ color: '#00F2FE' }}>{selectedVehicle.defects_detected} Defects</b>
+                                                </div>
+                                                <div style={styles.detailItem}>
+                                                    <span style={styles.detailLabel}>Last Telemetry Ping:</span>
+                                                    <b style={{ color: '#9CA3AF', fontSize: '11px' }}>{selectedVehicle.last_ping_formatted}</b>
+                                                </div>
+                                            </div>
+
+                                            {/* ASSIGNED DEFECTS HISTORY LIST */}
+                                            <div style={{ marginTop: '8px' }}>
+                                                <div style={{ fontFamily: 'Orbitron', fontSize: '12px', color: '#00F2FE', letterSpacing: '1px', marginBottom: '10px' }}>
+                                                    📋 ASSIGNED DEFECT LOGS ({selectedVehicleDetail && selectedVehicleDetail.defects ? selectedVehicleDetail.defects.length : 0})
+                                                </div>
+
+                                                <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                                                    {selectedVehicleDetail && selectedVehicleDetail.defects && selectedVehicleDetail.defects.length > 0 ? (
+                                                        selectedVehicleDetail.defects.slice(0, 100).map((d, idx) => {
+                                                            const sevColor = d.severity === 'Critical' ? '#ef4444' : d.severity === 'High' ? '#f59e0b' : d.severity === 'Medium' ? '#eab308' : '#3b82f6';
+                                                            return (
+                                                                <div key={idx} style={styles.defectCard}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                                                        <span style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '11px', fontWeight: 'bold' }}>{d.id}</span>
+                                                                        <span style={{ background: sevColor, color: '#0B0F19', padding: '1px 6px', borderRadius: '4px', fontFamily: 'Orbitron', fontSize: '9px', fontWeight: 'bold' }}>
+                                                                            {d.severity.toUpperCase()}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div style={{ fontSize: '11px', color: '#E5E7EB' }}>
+                                                                        Type: <b>{d.type.toUpperCase()}</b> | Depth: <b>{d.depth_cm} cm</b>
+                                                                    </div>
+                                                                    <div style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '3px' }}>
+                                                                        📍 {d.road_name} ({d.lat.toFixed(4)}, {d.lng.toFixed(4)})
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <div style={{ fontSize: '11px', color: '#9CA3AF', textAlign: 'center', padding: '20px' }}>
+                                                            No defects assigned to this vehicle unit yet.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div style={styles.emptyDrawer}>
+                                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚚</div>
+                                    <div style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '13px', marginBottom: '6px' }}>
+                                        FLEET UNIT INSPECTION
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#9CA3AF', lineHeight: '1.5' }}>
+                                        Click any vehicle unit in the table or on the live map to inspect telemetry, assigned road defects, and route trajectory.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const styles = {
+            kpiGrid: {
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: '16px',
+                marginBottom: '24px'
+            },
+            kpiCard: {
+                background: 'rgba(11, 15, 25, 0.9)',
+                border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px',
+                padding: '18px 20px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                backdropFilter: 'blur(8px)'
+            },
+            kpiHeader: {
+                fontFamily: 'Orbitron',
+                fontSize: '11px',
+                color: '#9CA3AF',
+                letterSpacing: '1px',
+                marginBottom: '6px'
+            },
+            kpiValue: {
+                fontFamily: 'Orbitron',
+                fontSize: '24px',
+                fontWeight: '900',
+                display: 'flex',
+                alignItems: 'center'
+            },
+            kpiMeta: {
+                fontSize: '11px',
+                color: '#9CA3AF',
+                marginTop: '6px'
+            },
+            mainLayout: {
+                display: 'flex',
+                gap: '24px',
+                alignItems: 'flex-start'
+            },
+            panelCard: {
+                background: 'rgba(11, 15, 25, 0.9)',
+                border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px',
+                padding: '20px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+            },
+            panelHeader: {
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '14px'
+            },
+            panelTitle: {
+                fontFamily: 'Orbitron',
+                color: '#00F2FE',
+                fontSize: '13px',
+                letterSpacing: '1px'
+            },
+            filterTab: {
+                border: '1px solid',
+                borderRadius: '6px',
+                padding: '6px 14px',
+                fontSize: '11px',
+                fontFamily: 'Orbitron',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+            },
+            searchInput: {
+                width: '100%',
+                background: 'rgba(15, 23, 42, 0.8)',
+                border: '1px solid rgba(0, 242, 254, 0.3)',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                color: '#E5E7EB',
+                fontSize: '11px',
+                outline: 'none'
+            },
+            table: {
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: '12px'
+            },
+            th: {
+                fontFamily: 'Orbitron',
+                fontSize: '10px',
+                color: '#9CA3AF',
+                textAlign: 'left',
+                padding: '10px 12px',
+                borderBottom: '1px solid rgba(0,242,254,0.2)',
+                letterSpacing: '1px'
+            },
+            tr: {
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                cursor: 'pointer',
+                transition: 'background-color 0.15s ease'
+            },
+            td: {
+                padding: '12px',
+                color: '#E5E7EB',
+                whiteSpace: 'nowrap'
+            },
+            inspectBtn: {
+                background: 'rgba(0, 242, 254, 0.1)',
+                border: '1px solid #00F2FE',
+                color: '#00F2FE',
+                borderRadius: '4px',
+                padding: '4px 10px',
+                fontFamily: 'Orbitron',
+                fontSize: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+            },
+            sideDrawer: {
+                width: '360px',
+                minWidth: '360px',
+                background: 'rgba(11, 15, 25, 0.95)',
+                border: '1px solid rgba(0, 242, 254, 0.3)',
+                borderRadius: '12px',
+                padding: '20px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                position: 'sticky',
+                top: '76px'
+            },
+            emptyDrawer: {
+                textAlign: 'center',
+                padding: '50px 20px',
+                color: '#9CA3AF'
+            },
+            closeBtn: {
+                background: 'transparent',
+                border: 'none',
+                color: '#ef4444',
+                fontSize: '18px',
+                cursor: 'pointer'
+            },
+            detailGrid: {
+                display: 'grid',
+                gridTemplateColumns: '1fr',
+                gap: '8px',
+                background: 'rgba(15, 23, 42, 0.7)',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(0,242,254,0.15)'
+            },
+            detailItem: {
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '11px'
+            },
+            detailLabel: {
+                color: '#9CA3AF'
+            },
+            detailVal: {
+                color: '#E5E7EB'
+            },
+            defectCard: {
+                background: 'rgba(15, 23, 42, 0.8)',
+                border: '1px solid rgba(0, 242, 254, 0.2)',
+                borderRadius: '6px',
+                padding: '8px 10px'
+            }
+        };
+
+        ReactDOM.createRoot(document.getElementById('app-root')).render(<MultiVehicleFleetApp />);
+    </script>
+    {% endraw %}
+</body>
+
+</html>

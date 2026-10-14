@@ -1,8 +1,13 @@
+import sys
+import os
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from flask import Flask, render_template, Response, jsonify, request, redirect, url_for, make_response
 from flask_cors import CORS
 import cv2
 import time
-import os
 import csv
 import io
 
@@ -16,12 +21,12 @@ from src.utils.db import (
 from src.utils.jwt_helper import encode_jwt
 from src.utils.auth_helper import requires_auth, get_current_user, ROLE_PERMISSIONS
 from src.api.mobile_api import mobile_api_bp, init_mobile_api
-try:
-    from backend.api.map_data import map_data_bp
-except ImportError:
-    import sys
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    from backend.api.map_data import map_data_bp
+from backend.api.map_data import map_data_bp
+from backend.api.work_orders import work_orders_bp
+from backend.api.analytics import analytics_bp
+from backend.api.predictive import predictive_bp
+from backend.api.fleet import fleet_bp
+from backend.api.routing import routing_bp
 
 from src.core.upload_processor import UploadProcessor
 from src.analytics.clustering import HotspotClusterer
@@ -40,9 +45,14 @@ UPLOAD_FOLDER = os.path.join(Config.DATA_DIR, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Register mobile API and Map Data blueprints
+# Register mobile API, Map Data, Work Orders, Analytics, Predictive, Fleet, and Routing blueprints
 app.register_blueprint(mobile_api_bp)
 app.register_blueprint(map_data_bp)
+app.register_blueprint(work_orders_bp)
+app.register_blueprint(analytics_bp)
+app.register_blueprint(predictive_bp)
+app.register_blueprint(fleet_bp)
+app.register_blueprint(routing_bp)
 
 logger = LogManager.get_system_logger()
 sys_manager = None
@@ -330,7 +340,47 @@ def index():
 def map_view():
     return render_template('map_view.html')
 
+@app.route('/work-orders')
+@requires_auth()
+def work_orders_view():
+    return render_template('work_orders.html')
+
+@app.route('/fleet')
+@requires_auth()
+def fleet_view():
+    return render_template('fleet.html')
+
+@app.route('/route-advisor')
+@requires_auth()
+def route_advisor_view():
+    return render_template('route_advisor.html')
+
+@app.route('/analytics')
+@requires_auth()
+def analytics_view():
+    return render_template('analytics.html')
+
+@app.route('/predictive-hotspots')
+@requires_auth()
+def predictive_hotspots_view():
+    return render_template('predictive_hotspots.html')
+
+_defects_cache = []
+_defects_cache_time = 0.0
+
+def _get_cached_defects():
+    global _defects_cache, _defects_cache_time
+    now = time.time()
+    if now - _defects_cache_time > 3.0:
+        try:
+            _defects_cache = get_defects()
+            _defects_cache_time = now
+        except Exception:
+            pass
+    return _defects_cache
+
 def stream_video():
+    jpeg_params = [int(cv2.IMWRITE_JPEG_QUALITY), 75]
     while True:
         if sys_manager is None:
             time.sleep(0.1)
@@ -341,7 +391,7 @@ def stream_video():
             time.sleep(0.04)
             continue
             
-        success, encoded_image = cv2.imencode('.jpg', frame)
+        success, encoded_image = cv2.imencode('.jpg', frame, jpeg_params)
         if not success:
             time.sleep(0.04)
             continue
@@ -357,6 +407,7 @@ def video_feed():
     return Response(stream_video(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 def stream_depth_video():
+    jpeg_params = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
     while True:
         if sys_manager is None:
             time.sleep(0.1)
@@ -367,7 +418,7 @@ def stream_depth_video():
             time.sleep(0.04)
             continue
             
-        success, encoded_image = cv2.imencode('.jpg', frame)
+        success, encoded_image = cv2.imencode('.jpg', frame, jpeg_params)
         if not success:
             time.sleep(0.04)
             continue
@@ -384,6 +435,7 @@ def depth_feed():
 
 def stream_upload_video():
     global active_upload_processor
+    jpeg_params = [int(cv2.IMWRITE_JPEG_QUALITY), 75]
     while True:
         if active_upload_processor is None:
             time.sleep(0.1)
@@ -392,7 +444,7 @@ def stream_upload_video():
         if frame is None:
             time.sleep(0.04)
             continue
-        success, encoded_image = cv2.imencode('.jpg', frame)
+        success, encoded_image = cv2.imencode('.jpg', frame, jpeg_params)
         if not success:
             time.sleep(0.04)
             continue
@@ -466,20 +518,24 @@ def get_telemetry():
     metrics = sys_manager.metrics.get_summary()
     
     obstacles_summary = []
+    sim_obs_coords = set()
     for obs in sys_manager.road_sim.obstacles:
+        lat, lon = obs["gps"][0], obs["gps"][1]
+        sim_obs_coords.add((round(lat, 4), round(lon, 4)))
         obstacles_summary.append({
             "id": obs["id"],
             "type": obs["type"],
-            "latitude": obs["gps"][0],
-            "longitude": obs["gps"][1],
+            "latitude": lat,
+            "longitude": lon,
             "severity": obs["severity"],
             "distance_m": round((obs["distance"] - sys_manager.road_sim.current_distance) % sys_manager.road_sim.total_path_length_meters, 1),
             "detected": obs["detected"]
         })
         
-    db_defects = get_defects()
+    db_defects = _get_cached_defects()
     for db_d in db_defects:
-        if not any(abs(obs["gps"][0] - db_d["latitude"]) < 0.0001 and abs(obs["gps"][1] - db_d["longitude"]) < 0.0001 for obs in sys_manager.road_sim.obstacles):
+        coord_key = (round(db_d["latitude"], 4), round(db_d["longitude"], 4))
+        if coord_key not in sim_obs_coords:
             obstacles_summary.append({
                 "id": 1000 + db_d["id"],
                 "type": db_d["type"],
@@ -645,8 +701,23 @@ def get_analytics_routes():
         "assessment": assessment
     })
 
+@app.route('/api/predictive/hotspots', methods=['GET'])
+def get_predictive_hotspots_direct():
+    try:
+        from backend.analytics.predictive_hotspot import get_predictive_hotspot_data
+        data = get_predictive_hotspot_data()
+        min_risk = request.args.get('min_risk', type=float)
+        if min_risk is not None and data.get('hotspots'):
+            filtered = [h for h in data['hotspots'] if h['predicted_risk_pct'] >= min_risk]
+            data['hotspots'] = filtered
+            data['summary']['filtered_count'] = len(filtered)
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 def run_server(host=Config.HOST, port=Config.PORT):
     import logging
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
+    print("Registered routes:", [str(rule) for rule in app.url_map.iter_rules()])
     app.run(host=host, port=port, debug=False, threaded=True)

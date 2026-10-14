@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeDrive AI - Municipal Work Orders Management</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <!-- React 18 & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0B0F19;
+            --panel-bg: rgba(11, 15, 25, 0.9);
+            --cyan: #00F2FE;
+            --yellow: #eab308;
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --green: #10b981;
+            --blue: #3b82f6;
+            --text-main: #E5E7EB;
+            --text-dim: #9CA3AF;
+            --font-display: 'Orbitron', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Top Header Nav */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 24px;
+            border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+            background: rgba(11, 15, 25, 0.95);
+            z-index: 1000;
+            height: 56px;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        .header .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .header .brand-text {
+            font-family: var(--font-display);
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: var(--cyan);
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            text-transform: uppercase;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab-btn {
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            color: var(--text-dim);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-family: var(--font-display);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .tab-btn:hover {
+            border-color: var(--cyan);
+            color: var(--text-main);
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+            font-weight: bold;
+        }
+
+        #app-root {
+            margin-top: 68px;
+            padding: 24px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="brand-title" onclick="window.location.href='/'">
+            <span class="brand-text">SafeDrive AI</span>
+        </div>
+
+        <div class="nav-tabs">
+            <a href="/" class="tab-btn">Simulation Drive</a>
+            <a href="/map" class="tab-btn">HD Map View</a>
+            <a href="/work-orders" class="tab-btn active">Work Orders</a>
+            <a href="/fleet" class="tab-btn">Multi-Vehicle Fleet</a>
+            <a href="/route-advisor" class="tab-btn">Route Advisor</a>
+            <a href="/analytics" class="tab-btn">Analytics</a>
+            <a href="/predictive-hotspots" class="tab-btn">Predictive Hotspot Detection</a>
+        </div>
+
+        <div>
+            <a href="/logout" class="tab-btn" style="border-color: var(--red); color: var(--red);">LOGOUT</a>
+        </div>
+    </div>
+
+    <div id="app-root"></div>
+
+    {% raw %}
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const PRIORITY_COLORS = {
+            CRITICAL: '#ef4444',
+            HIGH: '#f59e0b',
+            MEDIUM: '#eab308',
+            LOW: '#3b82f6'
+        };
+
+        function WorkOrdersPage() {
+            const [region, setRegion] = useState('Bangalore');
+            const [minSeverity, setMinSeverity] = useState('Medium');
+            const [workOrders, setWorkOrders] = useState([]);
+            const [summary, setSummary] = useState({ total_orders: 0, total_cost: 0, total_hours: 0 });
+            const [loading, setLoading] = useState(false);
+            const [selectedOrderModal, setSelectedOrderModal] = useState(null);
+
+            // Fetch existing or generate initial work orders
+            useEffect(() => {
+                fetchWorkOrders();
+            }, []);
+
+            const fetchWorkOrders = () => {
+                setLoading(true);
+                fetch('/api/work-orders')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.work_orders && data.work_orders.length > 0) {
+                            setWorkOrders(data.work_orders);
+                            const tCost = data.work_orders.reduce((acc, wo) => acc + wo.total_cost, 0);
+                            const tHours = data.work_orders.reduce((acc, wo) => acc + wo.total_labor_hours, 0);
+                            setSummary({
+                                total_orders: data.work_orders.length,
+                                total_cost: tCost,
+                                total_hours: tHours
+                            });
+                            setLoading(false);
+                        } else {
+                            generateOrders();
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        generateOrders();
+                    });
+            };
+
+            const generateOrders = () => {
+                setLoading(true);
+                fetch('/api/work-orders/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ region, min_severity: minSeverity })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        setWorkOrders(data.work_orders || []);
+                        setSummary(data.summary || { total_orders: 0, total_cost: 0, total_hours: 0 });
+                        setLoading(false);
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        setLoading(false);
+                    });
+            };
+
+            const handleStatusChange = (id, newStatus, defaultCrew = 'Team A') => {
+                let crewName = defaultCrew;
+                if (newStatus === 'Assigned') {
+                    const input = prompt("Enter Repair Crew Name:", defaultCrew);
+                    if (!input) return;
+                    crewName = input;
+                }
+                fetch(`/api/work-orders/${id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus, crew_name: crewName })
+                })
+                    .then(res => res.json())
+                    .then(() => {
+                        setWorkOrders(prev => prev.map(wo => {
+                            if (wo.id === id || wo.work_order_code === id) {
+                                return { ...wo, status: newStatus, crew_name: crewName };
+                            }
+                            return wo;
+                        }));
+                    });
+            };
+
+            const downloadPDF = (reg = region) => {
+                window.location.href = `/api/work-orders/export-pdf?region=${encodeURIComponent(reg)}`;
+            };
+
+            return (
+                <div>
+                    {/* PAGE TITLE */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                        <div>
+                            <h1 style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '24px', letterSpacing: '1px' }}>
+                                MUNICIPAL WORK ORDERS DISPATCH
+                            </h1>
+                            <p style={{ color: '#9CA3AF', fontSize: '13px', marginTop: '4px' }}>
+                                Automated Corridor Grouping, Labor Hours & Financial Optimization
+                            </p>
+                        </div>
+                        <button onClick={() => downloadPDF(region)} style={styles.exportAllBtn}>
+                            📄 EXPORT REPORT PDF
+                        </button>
+                    </div>
+
+                    {/* FILTER & GENERATION CONTROL BAR */}
+                    <div style={styles.controlBar}>
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                            <div style={styles.filterGroup}>
+                                <span style={styles.filterLabel}>REGION:</span>
+                                <select value={region} onChange={(e) => setRegion(e.target.value)} style={styles.selectInput}>
+                                    <option value="Bangalore">Bangalore</option>
+                                    <option value="San Francisco">San Francisco</option>
+                                </select>
+                            </div>
+
+                            <div style={styles.filterGroup}>
+                                <span style={styles.filterLabel}>MIN SEVERITY:</span>
+                                <select value={minSeverity} onChange={(e) => setMinSeverity(e.target.value)} style={styles.selectInput}>
+                                    <option value="Low">Low (All Defects)</option>
+                                    <option value="Medium">Medium & Above</option>
+                                    <option value="High">High & Critical</option>
+                                    <option value="Critical">Critical Only</option>
+                                </select>
+                            </div>
+
+                            <button onClick={generateOrders} style={styles.generateBtn}>
+                                ⚡ GENERATE WORK ORDERS
+                            </button>
+                        </div>
+
+                        {loading && (
+                            <span style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '11px' }}>
+                                PROCESSING GEOSPATIAL CORRIDORS...
+                            </span>
+                        )}
+                    </div>
+
+                    {/* SUMMARY CARDS ROW */}
+                    <div style={styles.summaryGrid}>
+                        <div style={styles.summaryCard}>
+                            <span style={styles.summaryLabel}>TOTAL WORK ORDERS</span>
+                            <span style={{ ...styles.summaryVal, color: '#00F2FE' }}>{summary.total_orders}</span>
+                        </div>
+                        <div style={styles.summaryCard}>
+                            <span style={styles.summaryLabel}>TOTAL REPAIR BUDGET</span>
+                            <span style={{ ...styles.summaryVal, color: '#10b981' }}>${summary.total_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div style={styles.summaryCard}>
+                            <span style={styles.summaryLabel}>ESTIMATED CREW HOURS</span>
+                            <span style={{ ...styles.summaryVal, color: '#f59e0b' }}>{summary.total_hours.toFixed(1)} Hours</span>
+                        </div>
+                    </div>
+
+                    {/* WORK ORDERS TABLE */}
+                    <div style={styles.tableCard}>
+                        <table style={styles.table}>
+                            <thead>
+                                <tr style={styles.thRow}>
+                                    <th style={styles.th}>WORK ORDER CODE</th>
+                                    <th style={styles.th}>ROAD CORRIDOR</th>
+                                    <th style={styles.th}>DEFECTS</th>
+                                    <th style={styles.th}>EST. REPAIR COST</th>
+                                    <th style={styles.th}>LABOR HOURS</th>
+                                    <th style={styles.th}>PRIORITY</th>
+                                    <th style={styles.th}>STATUS</th>
+                                    <th style={styles.th}>CREW</th>
+                                    <th style={styles.th}>ACTIONS</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {workOrders.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                                            No work orders generated. Click "GENERATE WORK ORDERS" above.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    workOrders.map((wo, idx) => (
+                                        <tr key={wo.id || idx} style={styles.tr}>
+                                            <td style={{ ...styles.td, fontFamily: 'Orbitron', color: '#00F2FE', fontWeight: 'bold' }}>
+                                                {wo.work_order_code}
+                                            </td>
+                                            <td style={styles.td}><b>{wo.road_name}</b></td>
+                                            <td style={styles.td}>{wo.defect_count} defects</td>
+                                            <td style={{ ...styles.td, color: '#10b981', fontWeight: 'bold' }}>
+                                                ${wo.total_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td style={styles.td}>{wo.total_labor_hours.toFixed(1)} hrs ({wo.crew_size} crew)</td>
+                                            <td style={styles.td}>
+                                                <span style={{
+                                                    background: PRIORITY_COLORS[wo.priority] || '#00F2FE',
+                                                    color: '#0B0F19', padding: '3px 8px', borderRadius: '4px',
+                                                    fontFamily: 'Orbitron', fontSize: '10px', fontWeight: 'bold'
+                                                }}>
+                                                    {wo.priority}
+                                                </span>
+                                            </td>
+                                            <td style={styles.td}>
+                                                <span style={{
+                                                    color: wo.status === 'Completed' ? '#10b981' : (wo.status === 'Assigned' ? '#00F2FE' : '#9CA3AF'),
+                                                    fontWeight: 'bold'
+                                                }}>
+                                                    {wo.status || 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td style={styles.td}>{wo.crew_name || 'Unassigned'}</td>
+                                            <td style={styles.td}>
+                                                <div style={{ display: 'flex', gap: '6px' }}>
+                                                    <button onClick={() => setSelectedOrderModal(wo)} style={styles.actionBtnSec}>View</button>
+                                                    <button onClick={() => handleStatusChange(wo.id || wo.work_order_code, 'Assigned')} style={styles.actionBtn}>Assign</button>
+                                                    <button onClick={() => handleStatusChange(wo.id || wo.work_order_code, 'Completed')} style={styles.actionBtnGreen}>Complete</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* DETAIL MODAL */}
+                    {selectedOrderModal && (
+                        <div style={styles.modalOverlay}>
+                            <div style={styles.modalCard}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <h3 style={{ fontFamily: 'Orbitron', color: '#00F2FE', margin: 0 }}>
+                                        {selectedOrderModal.work_order_code} — {selectedOrderModal.road_name}
+                                    </h3>
+                                    <button onClick={() => setSelectedOrderModal(null)} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+                                </div>
+                                <div style={{ fontSize: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', background: 'rgba(15,23,42,0.8)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                                    <div>Cost: <b style={{ color: '#10b981' }}>${selectedOrderModal.total_cost.toFixed(2)}</b></div>
+                                    <div>Labor: <b>{selectedOrderModal.total_labor_hours.toFixed(1)} hrs</b></div>
+                                    <div>Crew: <b>{selectedOrderModal.crew_name} ({selectedOrderModal.crew_size} tech)</b></div>
+                                </div>
+                                <h4 style={{ fontFamily: 'Orbitron', color: '#E5E7EB', fontSize: '13px', marginBottom: '8px' }}>DEFECT INVENTORY</h4>
+                                <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid rgba(0,242,254,0.2)', borderRadius: '6px' }}>
+                                    <table style={{ ...styles.table, fontSize: '11px' }}>
+                                        <thead>
+                                            <tr style={styles.thRow}>
+                                                <th style={styles.th}>ID</th>
+                                                <th style={styles.th}>Type</th>
+                                                <th style={styles.th}>Severity</th>
+                                                <th style={styles.th}>Depth</th>
+                                                <th style={styles.th}>GPS</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(selectedOrderModal.defects || []).map((d, i) => (
+                                                <tr key={i} style={styles.tr}>
+                                                    <td style={styles.td}>{d.id || `DEF-${d.raw_id}`}</td>
+                                                    <td style={styles.td}>{(d.type || 'Pothole').toUpperCase()}</td>
+                                                    <td style={{ ...styles.td, color: PRIORITY_COLORS[d.severity ? d.severity.toUpperCase() : 'MEDIUM'] }}>{d.severity}</td>
+                                                    <td style={styles.td}>{d.depth_cm} cm</td>
+                                                    <td style={styles.td}>{d.lat ? d.lat.toFixed(4) : ''}, {d.lng ? d.lng.toFixed(4) : ''}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const styles = {
+            exportAllBtn: {
+                background: 'linear-gradient(135deg, #0284c7 0%, #00F2FE 100%)', color: '#0B0F19', border: 'none',
+                borderRadius: '6px', padding: '10px 20px', fontFamily: 'Orbitron', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer'
+            },
+            controlBar: {
+                background: 'rgba(11, 15, 25, 0.9)', border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '10px', padding: '14px 20px', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', marginBottom: '24px', backdropFilter: 'blur(10px)'
+            },
+            filterGroup: { display: 'flex', alignItems: 'center', gap: '8px' },
+            filterLabel: { fontSize: '11px', fontFamily: 'Orbitron', color: '#9CA3AF' },
+            selectInput: {
+                background: '#0F172A', color: '#00F2FE', border: '1px solid #00F2FE',
+                borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontFamily: 'Orbitron', cursor: 'pointer', outline: 'none'
+            },
+            generateBtn: {
+                background: 'rgba(0, 242, 254, 0.15)', border: '1px solid #00F2FE', color: '#00F2FE',
+                borderRadius: '6px', padding: '8px 16px', fontSize: '11px', fontFamily: 'Orbitron', fontWeight: 'bold', cursor: 'pointer'
+            },
+            summaryGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' },
+            summaryCard: {
+                background: 'rgba(11, 15, 25, 0.9)', border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px', padding: '18px 24px', display: 'flex', flexDirection: 'column'
+            },
+            summaryLabel: { fontSize: '11px', fontFamily: 'Orbitron', color: '#9CA3AF', letterSpacing: '1px' },
+            summaryVal: { fontSize: '26px', fontFamily: 'Orbitron', fontWeight: 'bold', marginTop: '6px' },
+            tableCard: {
+                background: 'rgba(11, 15, 25, 0.9)', border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.6)'
+            },
+            table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
+            thRow: { background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid rgba(0, 242, 254, 0.3)' },
+            th: { padding: '14px 18px', fontSize: '11px', fontFamily: 'Orbitron', color: '#00F2FE' },
+            tr: { borderBottom: '1px solid rgba(255, 255, 255, 0.05)', transition: 'background 0.15s ease' },
+            td: { padding: '12px 18px', fontSize: '12px', color: '#E5E7EB' },
+            actionBtn: { background: 'rgba(0,242,254,0.15)', border: '1px solid #00F2FE', color: '#00F2FE', borderRadius: '4px', padding: '4px 8px', fontSize: '10px', fontFamily: 'Orbitron', cursor: 'pointer' },
+            actionBtnSec: { background: 'rgba(156,163,175,0.15)', border: '1px solid #9CA3AF', color: '#9CA3AF', borderRadius: '4px', padding: '4px 8px', fontSize: '10px', fontFamily: 'Orbitron', cursor: 'pointer' },
+            actionBtnGreen: { background: 'rgba(16,185,129,0.15)', border: '1px solid #10b981', color: '#10b981', borderRadius: '4px', padding: '4px 8px', fontSize: '10px', fontFamily: 'Orbitron', cursor: 'pointer' },
+            modalOverlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(5, 8, 15, 0.85)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000 },
+            modalCard: { width: '700px', background: '#0B0F19', border: '1px solid #00F2FE', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.9)' }
+        };
+
+        ReactDOM.createRoot(document.getElementById('app-root')).render(<WorkOrdersPage />);
+    </script>
+    {% endraw %}
+
+</body>
+
+</html>

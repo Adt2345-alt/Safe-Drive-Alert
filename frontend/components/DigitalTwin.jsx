@@ -29,11 +29,11 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
   const [nearbyDefects, setNearbyDefects] = useState([]);
   const [allDefectsList, setAllDefectsList] = useState([]);
 
-  const [labelCoords, setLabelCoords] = useState({
-    depth: { x: 0, y: 0, visible: false },
-    width: { x: 0, y: 0, visible: false },
-    length: { x: 0, y: 0, visible: false }
-  });
+  const depthLabelRef = useRef(null);
+  const widthLabelRef = useRef(null);
+  const lengthLabelRef = useRef(null);
+  const showLabelsRef = useRef(showLabels);
+  showLabelsRef.current = showLabels;
 
   // 1. Fetch available defects list & auto-select first defect if none pre-selected
   useEffect(() => {
@@ -113,31 +113,35 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
     }
   }, [compareMode, defectData]);
 
-  // Helper to generate procedural asphalt texture
+  // Helper to generate procedural asphalt texture with fast ImageData buffer
   const createAsphaltTexture = (THREE) => {
+    if (window._asphaltTextureCache) return window._asphaltTextureCache;
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = '#22262e';
-    ctx.fillRect(0, 0, 512, 512);
+    const imgData = ctx.createImageData(512, 512);
+    const data = imgData.data;
 
-    for (let i = 0; i < 35000; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      const shade = Math.floor(Math.random() * 50) + 15;
-      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
-      ctx.fillRect(x, y, 1.5, 1.5);
+    for (let i = 0; i < data.length; i += 4) {
+      const base = 35 + Math.floor(Math.random() * 15);
+      const noise = (Math.random() > 0.65) ? (Math.random() * 40 - 20) : 0;
+      const val = Math.max(10, Math.min(90, Math.floor(base + noise)));
+      data[i] = val;
+      data[i + 1] = val + 4;
+      data[i + 2] = val + 8;
+      data[i + 3] = 255;
     }
+    ctx.putImageData(imgData, 0, 0);
 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.lineWidth = 1;
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 20; i++) {
       ctx.beginPath();
       const y = Math.random() * 512;
       ctx.moveTo(0, y);
-      ctx.lineTo(512, y + (Math.random() * 12 - 6));
+      ctx.lineTo(512, y + (Math.random() * 10 - 5));
       ctx.stroke();
     }
 
@@ -145,6 +149,7 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(4, 8);
+    window._asphaltTextureCache = texture;
     return texture;
   };
 
@@ -208,7 +213,7 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
       controls.update();
     }
 
-    const roadGeo = new THREE.PlaneGeometry(12, 20, 140, 140);
+    const roadGeo = new THREE.PlaneGeometry(12, 20, 60, 60);
     roadGeo.rotateX(-Math.PI / 2);
 
     const pos = roadGeo.attributes.position;
@@ -384,11 +389,22 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
           return { x, y, visible: tempVec.z < 1.0 };
         };
 
-        setLabelCoords({
-          depth: projectPoint(new THREE.Vector3(0, -depthM / 2, 0)),
-          width: projectPoint(new THREE.Vector3(widthM / 2, 0.1, 0)),
-          length: projectPoint(new THREE.Vector3(0, 0.1, lengthM / 2))
-        });
+        const isShowing = showLabelsRef.current;
+        if (depthLabelRef.current) {
+          const p = projectPoint(new THREE.Vector3(0, -depthM / 2, 0));
+          depthLabelRef.current.style.transform = `translate(-50%, -100%) translate(${p.x}px, ${p.y}px)`;
+          depthLabelRef.current.style.display = (isShowing && p.visible) ? 'block' : 'none';
+        }
+        if (widthLabelRef.current) {
+          const p = projectPoint(new THREE.Vector3(widthM / 2, 0.1, 0));
+          widthLabelRef.current.style.transform = `translate(-50%, -100%) translate(${p.x}px, ${p.y}px)`;
+          widthLabelRef.current.style.display = (isShowing && p.visible) ? 'block' : 'none';
+        }
+        if (lengthLabelRef.current) {
+          const p = projectPoint(new THREE.Vector3(0, 0.1, lengthM / 2));
+          lengthLabelRef.current.style.transform = `translate(-50%, -100%) translate(${p.x}px, ${p.y}px)`;
+          lengthLabelRef.current.style.display = (isShowing && p.visible) ? 'block' : 'none';
+        }
       }
     };
     animate();
@@ -600,21 +616,16 @@ export default function DigitalTwin({ defectId, defect: initialDefect, onClose }
                 </div>
               </div>
 
-              {showLabels && labelCoords.depth.visible && (
-                <div style={{ ...styles.labelBox, top: `${labelCoords.depth.y}px`, left: `${labelCoords.depth.x}px`, borderColor: '#00F2FE' }}>
-                  ↕ Depth: {depthCm} cm
-                </div>
-              )}
-              {showLabels && labelCoords.width.visible && (
-                <div style={{ ...styles.labelBox, top: `${labelCoords.width.y}px`, left: `${labelCoords.width.x}px`, borderColor: '#f59e0b' }}>
-                  ↔ Width: {widthCm} cm
-                </div>
-              )}
-              {showLabels && labelCoords.length.visible && (
-                <div style={{ ...styles.labelBox, top: `${labelCoords.length.y}px`, left: `${labelCoords.length.x}px`, borderColor: '#10b981' }}>
-                  ⇕ Length: {lengthCm} cm
-                </div>
-              )}
+              {/* 3D MEASUREMENT LABELS OVERLAY (Direct DOM 60 FPS) */}
+              <div ref={depthLabelRef} style={{ ...styles.labelBox, borderColor: '#00F2FE', top: 0, left: 0, display: 'none' }}>
+                ↕ Depth: {depthCm} cm
+              </div>
+              <div ref={widthLabelRef} style={{ ...styles.labelBox, borderColor: '#f59e0b', top: 0, left: 0, display: 'none' }}>
+                ↔ Width: {widthCm} cm
+              </div>
+              <div ref={lengthLabelRef} style={{ ...styles.labelBox, borderColor: '#10b981', top: 0, left: 0, display: 'none' }}>
+                ⇕ Length: {lengthCm} cm
+              </div>
 
               {isMeasuring && (
                 <div style={styles.measureNotice}>

@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeDrive AI - Intelligent Route Advisor</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <!-- MapLibre GL JS CSS & JS for OpenFreeMap -->
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+    <!-- React 18 & ReactDOM CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0B0F19;
+            --panel-bg: rgba(11, 15, 25, 0.9);
+            --cyan: #00F2FE;
+            --yellow: #eab308;
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --green: #10b981;
+            --blue: #3b82f6;
+            --text-main: #E5E7EB;
+            --text-dim: #9CA3AF;
+            --font-display: 'Orbitron', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Top Header Nav */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 24px;
+            border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+            background: rgba(11, 15, 25, 0.95);
+            z-index: 1000;
+            height: 56px;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        .header .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .header .brand-text {
+            font-family: var(--font-display);
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: var(--cyan);
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            text-transform: uppercase;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab-btn {
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            color: var(--text-dim);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-family: var(--font-display);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .tab-btn:hover {
+            border-color: var(--cyan);
+            color: var(--text-main);
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+            font-weight: bold;
+        }
+
+        #app-root {
+            margin-top: 68px;
+            padding: 24px;
+            max-width: 1600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #0B0F19;
+            border: 1px solid var(--cyan);
+            border-radius: 6px;
+            z-index: 2000;
+            max-height: 200px;
+            overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+        }
+
+        .autocomplete-item {
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-main);
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .autocomplete-item:hover {
+            background: rgba(0, 242, 254, 0.15);
+            color: var(--cyan);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header Navigation Bar -->
+    <div class="header">
+        <div class="brand-title" onclick="window.location.href='/'">
+            <span class="brand-text">SafeDrive AI</span>
+        </div>
+
+        <div class="nav-tabs">
+            <a href="/" class="tab-btn">Simulation Drive</a>
+            <a href="/map" class="tab-btn">HD Map View</a>
+            <a href="/work-orders" class="tab-btn">Work Orders</a>
+            <a href="/fleet" class="tab-btn">Multi-Vehicle Fleet</a>
+            <a href="/route-advisor" class="tab-btn active">Route Advisor</a>
+            <a href="/analytics" class="tab-btn">Analytics</a>
+            <a href="/predictive-hotspots" class="tab-btn">Predictive Hotspot Detection</a>
+        </div>
+
+        <div>
+            <a href="/logout" class="tab-btn" style="border-color: var(--red); color: var(--red);">LOGOUT</a>
+        </div>
+    </div>
+
+    <!-- React Root Container -->
+    <div id="app-root"></div>
+
+    <!-- JSX React Application -->
+    {% raw %}
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const ROUTE_COLORS = {
+            green: '#10b981',
+            yellow: '#eab308',
+            red: '#ef4444'
+        };
+
+        function RouteAdvisorApp() {
+            // Form state
+            const [fromQuery, setFromQuery] = useState('MG Road Bangalore');
+            const [toQuery, setToQuery] = useState('Koramangala Bangalore');
+
+            const [fromCoords, setFromCoords] = useState({ lat: 12.9716, lng: 77.5946 });
+            const [toCoords, setToCoords] = useState({ lat: 12.9352, lng: 77.6245 });
+
+            const [fromSuggestions, setFromSuggestions] = useState([]);
+            const [toSuggestions, setToSuggestions] = useState([]);
+
+            const [loadingRoutes, setLoadingRoutes] = useState(false);
+            const [routes, setRoutes] = useState([]);
+            const [selectedRouteId, setSelectedRouteId] = useState('A');
+            const [errorMsg, setErrorMsg] = useState('');
+
+            const mapContainerRef = useRef(null);
+            const mapInstanceRef = useRef(null);
+
+            // 1. Initialize MapLibre GL Map
+            useEffect(() => {
+                if (!mapContainerRef.current || mapInstanceRef.current) return;
+                if (!window.maplibregl) return;
+
+                const map = new window.maplibregl.Map({
+                    container: mapContainerRef.current,
+                    style: 'https://tiles.openfreemap.org/styles/dark',
+                    center: [77.6080, 12.9534], // Midpoint Bangalore
+                    zoom: 12.5,
+                    pitch: 20,
+                    attributionControl: false
+                });
+
+                map.addControl(new window.maplibregl.NavigationControl(), 'top-right');
+                mapInstanceRef.current = map;
+
+                // Auto-fetch routes on mount
+                handleFindRoutes(12.9716, 77.5946, 12.9352, 77.6245);
+
+                return () => {
+                    if (mapInstanceRef.current) {
+                        mapInstanceRef.current.remove();
+                        mapInstanceRef.current = null;
+                    }
+                };
+            }, []);
+
+            // 2. Geocode Autocomplete Handlers
+            const fetchGeocode = (query, callback) => {
+                if (!query || query.length < 3) {
+                    callback([]);
+                    return;
+                }
+                fetch('/api/route/geocode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.results) callback(data.results);
+                    else callback([]);
+                })
+                .catch(() => callback([]));
+            };
+
+            const handleFromChange = (val) => {
+                setFromQuery(val);
+                fetchGeocode(val, setFromSuggestions);
+            };
+
+            const handleToChange = (val) => {
+                setToQuery(val);
+                fetchGeocode(val, setToSuggestions);
+            };
+
+            // 3. Find Routes Handler
+            function handleFindRoutes(overrideStartLat, overrideStartLng, overrideEndLat, overrideEndLng) {
+                const sLat = overrideStartLat !== undefined ? overrideStartLat : fromCoords.lat;
+                const sLng = overrideStartLng !== undefined ? overrideStartLng : fromCoords.lng;
+                const eLat = overrideEndLat !== undefined ? overrideEndLat : toCoords.lat;
+                const eLng = overrideEndLng !== undefined ? overrideEndLng : toCoords.lng;
+
+                setLoadingRoutes(true);
+                setErrorMsg('');
+
+                fetch('/api/route/advise', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start: { lat: sLat, lng: sLng },
+                        end: { lat: eLat, lng: eLng }
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    setLoadingRoutes(false);
+                    if (data.status === 'success' && data.routes) {
+                        setRoutes(data.routes);
+                        if (data.routes.length > 0) {
+                            setSelectedRouteId(data.routes[0].route_id);
+                            renderRoutesOnMap(data.routes);
+                        }
+                    } else {
+                        setErrorMsg(String(data.message || 'Failed to calculate routes'));
+                    }
+                })
+                .catch(err => {
+                    setLoadingRoutes(false);
+                    setErrorMsg('Network error requesting route advisor API');
+                });
+            }
+
+            // 4. Render 3 Colored Route Polylines on MapLibre
+            const renderRoutesOnMap = (routeList) => {
+                if (!mapInstanceRef.current || !window.maplibregl) return;
+                const map = mapInstanceRef.current;
+
+                const draw = () => {
+                    // Remove existing layers and sources
+                    routeList.forEach((r, idx) => {
+                        const layerId = `route-layer-${r.route_id}`;
+                        const sourceId = `route-source-${r.route_id}`;
+                        if (map.getLayer(layerId)) map.removeLayer(layerId);
+                        if (map.getSource(sourceId)) map.removeSource(sourceId);
+                    });
+
+                    const bounds = new window.maplibregl.LngLatBounds();
+
+                    routeList.forEach((r) => {
+                        const layerId = `route-layer-${r.route_id}`;
+                        const sourceId = `route-source-${r.route_id}`;
+
+                        // geometry is [[lat, lng], ...] -> Convert to GeoJSON [[lng, lat], ...]
+                        const coords = r.geometry.map(pt => [pt[1], pt[0]]);
+                        coords.forEach(pt => bounds.extend(pt));
+
+                        map.addSource(sourceId, {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                properties: { route_id: r.route_id },
+                                geometry: {
+                                    type: 'LineString',
+                                    coordinates: coords
+                                }
+                            }
+                        });
+
+                        const colorHex = ROUTE_COLORS[r.color] || '#10b981';
+
+                        map.addLayer({
+                            id: layerId,
+                            type: 'line',
+                            source: sourceId,
+                            layout: {
+                                'line-join': 'round',
+                                'line-cap': 'round'
+                            },
+                            paint: {
+                                'line-color': colorHex,
+                                'line-width': r.route_id === selectedRouteId ? 7 : 5,
+                                'line-opacity': r.route_id === selectedRouteId ? 1.0 : 0.8
+                            }
+                        });
+
+                        map.on('click', layerId, () => {
+                            setSelectedRouteId(r.route_id);
+                        });
+                    });
+
+                    if (!bounds.isEmpty()) {
+                        map.fitBounds(bounds, { padding: 80, maxZoom: 15 });
+                    }
+                };
+
+                if (map.isStyleLoaded()) draw();
+                else map.once('load', draw);
+            };
+
+            // Update line weights when selected route changes
+            useEffect(() => {
+                if (!mapInstanceRef.current || routes.length === 0) return;
+                const map = mapInstanceRef.current;
+                routes.forEach(r => {
+                    const layerId = `route-layer-${r.route_id}`;
+                    if (map.getLayer(layerId)) {
+                        map.setPaintProperty(layerId, 'line-width', r.route_id === selectedRouteId ? 8 : 5);
+                        map.setPaintProperty(layerId, 'line-opacity', r.route_id === selectedRouteId ? 1.0 : 0.6);
+                    }
+                });
+            }, [selectedRouteId, routes]);
+
+            // 5. Open Google Maps Navigation Link
+            const openGoogleMapsNav = (routeObj) => {
+                if (!routeObj || !routeObj.geometry || routeObj.geometry.length === 0) return;
+                const geom = routeObj.geometry;
+                const startPt = geom[0];
+                const endPt = geom[geom.length - 1];
+
+                let url = `https://www.google.com/maps/dir/?api=1&origin=${startPt[0]},${startPt[1]}&destination=${endPt[0]},${endPt[1]}&travelmode=driving`;
+                
+                // Add up to 3 intermediate waypoints if available
+                if (geom.length > 10) {
+                    const step = Math.floor(geom.length / 4);
+                    const wp1 = geom[step];
+                    const wp2 = geom[step * 2];
+                    const wp3 = geom[step * 3];
+                    url += `&waypoints=${wp1[0]},${wp1[1]}|${wp2[0]},${wp2[1]}|${wp3[0]},${wp3[1]}`;
+                }
+
+                window.open(url, '_blank');
+            };
+
+            return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    
+                    {/* TOP INPUT FORM */}
+                    <div style={styles.formCard}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', width: '100%' }}>
+                            {/* FROM INPUT */}
+                            <div style={{ flex: '1', minWidth: '260px', position: 'relative' }}>
+                                <label style={styles.inputLabel}>FROM LOCATION (START):</label>
+                                <input
+                                    type="text"
+                                    value={fromQuery}
+                                    onChange={(e) => handleFromChange(e.target.value)}
+                                    placeholder="Enter origin address..."
+                                    style={styles.textInput}
+                                />
+                                {fromSuggestions.length > 0 && (
+                                    <div className="autocomplete-dropdown">
+                                        {fromSuggestions.map((item, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="autocomplete-item"
+                                                onClick={() => {
+                                                    setFromQuery(item.display_name);
+                                                    setFromCoords({ lat: item.lat, lng: item.lng });
+                                                    setFromSuggestions([]);
+                                                }}
+                                            >
+                                                📍 {item.display_name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* TO INPUT */}
+                            <div style={{ flex: '1', minWidth: '260px', position: 'relative' }}>
+                                <label style={styles.inputLabel}>TO LOCATION (DESTINATION):</label>
+                                <input
+                                    type="text"
+                                    value={toQuery}
+                                    onChange={(e) => handleToChange(e.target.value)}
+                                    placeholder="Enter destination address..."
+                                    style={styles.textInput}
+                                />
+                                {toSuggestions.length > 0 && (
+                                    <div className="autocomplete-dropdown">
+                                        {toSuggestions.map((item, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="autocomplete-item"
+                                                onClick={() => {
+                                                    setToQuery(item.display_name);
+                                                    setToCoords({ lat: item.lat, lng: item.lng });
+                                                    setToSuggestions([]);
+                                                }}
+                                            >
+                                                🎯 {item.display_name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* FIND ROUTES BUTTON */}
+                            <div style={{ alignSelf: 'flex-end' }}>
+                                <button
+                                    onClick={() => handleFindRoutes()}
+                                    disabled={loadingRoutes}
+                                    style={styles.findBtn}
+                                >
+                                    {loadingRoutes ? '⚡ CALCULATING...' : '🗺️ FIND ROUTES'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {errorMsg && (
+                            <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '10px', fontFamily: 'Orbitron' }}>
+                                ⚠️ {errorMsg}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* MAIN SPLIT LAYOUT */}
+                    <div style={styles.splitLayout}>
+                        {/* LEFT (60%): MAPLIBRE MAP */}
+                        <div style={{ flex: '6', minWidth: '0' }}>
+                            <div style={styles.mapCard}>
+                                <div style={styles.mapHeader}>
+                                    <span style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '13px', fontWeight: 'bold' }}>
+                                        🧭 ROUTE CORRIDOR ANALYSIS MAP
+                                    </span>
+                                    <span style={{ fontSize: '11px', color: '#10b981', fontFamily: 'Orbitron' }}>
+                                        OPENFREEMAP DARK TILES
+                                    </span>
+                                </div>
+                                <div ref={mapContainerRef} style={{ width: '100%', height: '540px', borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(0, 242, 254, 0.3)' }} />
+                            </div>
+                        </div>
+
+                        {/* RIGHT (40%): STACKED ROUTE CARDS */}
+                        <div style={{ flex: '4', display: 'flex', flexDirection: 'column', gap: '14px', minWidth: '320px' }}>
+                            <div style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '13px', letterSpacing: '1px', fontWeight: 'bold' }}>
+                                📊 ALTERNATIVE ROUTES ({routes.length})
+                            </div>
+
+                            {loadingRoutes ? (
+                                <div style={{ textAlign: 'center', padding: '60px 0', color: '#00F2FE', fontFamily: 'Orbitron' }}>
+                                    ⚡ Querying OpenRouteService & Sampling 50m Polyline Defects...
+                                </div>
+                            ) : routes.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9CA3AF', background: 'rgba(11,15,25,0.9)', borderRadius: '12px', border: '1px solid rgba(0,242,254,0.2)' }}>
+                                    Enter origin & destination above and click <b>FIND ROUTES</b>.
+                                </div>
+                            ) : (
+                                routes.map((r, idx) => {
+                                    const isSelected = r.route_id === selectedRouteId;
+                                    const isSafest = idx === 0;
+                                    const cardColor = ROUTE_COLORS[r.color] || '#10b981';
+
+                                    return (
+                                        <div
+                                            key={r.route_id}
+                                            onClick={() => setSelectedRouteId(r.route_id)}
+                                            style={{
+                                                ...styles.routeCard,
+                                                borderColor: isSelected ? cardColor : 'rgba(0, 242, 254, 0.25)',
+                                                background: isSelected ? 'rgba(11, 15, 25, 0.95)' : 'rgba(11, 15, 25, 0.75)',
+                                                boxShadow: isSelected ? `0 0 20px ${cardColor}44, 0 8px 24px rgba(0,0,0,0.6)` : '0 4px 12px rgba(0,0,0,0.4)',
+                                                transform: isSelected ? 'scale(1.02)' : 'scale(1.0)'
+                                            }}
+                                        >
+                                            {/* CARD HEADER */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <span style={{
+                                                        width: '28px', height: '28px', borderRadius: '50%',
+                                                        background: cardColor, color: '#0B0F19',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        fontFamily: 'Orbitron', fontWeight: '900', fontSize: '14px'
+                                                    }}>
+                                                        {r.route_id}
+                                                    </span>
+
+                                                    {isSafest && (
+                                                        <span style={{
+                                                            background: 'rgba(16, 185, 129, 0.2)', color: '#10b981',
+                                                            border: '1px solid #10b981', padding: '2px 8px', borderRadius: '12px',
+                                                            fontFamily: 'Orbitron', fontSize: '10px', fontWeight: 'bold'
+                                                        }}>
+                                                            ⭐ RECOMMENDED
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* RISK LEVEL BADGE */}
+                                                <span style={{
+                                                    background: cardColor, color: '#0B0F19',
+                                                    padding: '3px 10px', borderRadius: '6px',
+                                                    fontFamily: 'Orbitron', fontSize: '11px', fontWeight: 'bold'
+                                                }}>
+                                                    {r.risk_level} RISK (SCORE {r.risk_score})
+                                                </span>
+                                            </div>
+
+                                            {/* METRICS GRID */}
+                                            <div style={styles.cardMetricsGrid}>
+                                                <div>
+                                                    <span style={styles.metricLabel}>DURATION:</span>
+                                                    <div style={styles.metricVal}>{r.duration_min} min</div>
+                                                </div>
+                                                <div>
+                                                    <span style={styles.metricLabel}>DISTANCE:</span>
+                                                    <div style={styles.metricVal}>{r.distance_km} km</div>
+                                                </div>
+                                                <div>
+                                                    <span style={styles.metricLabel}>DEFECTS LOGGED:</span>
+                                                    <div style={{ ...styles.metricVal, color: r.defect_count > 5 ? '#ef4444' : '#00F2FE' }}>
+                                                        {r.defect_count} Defects
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span style={styles.metricLabel}>EST. DAMAGE:</span>
+                                                    <div style={{ ...styles.metricVal, color: '#f59e0b' }}>
+                                                        ${r.estimated_damage}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* NAVIGATE BUTTON */}
+                                            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openGoogleMapsNav(r); }}
+                                                    style={{
+                                                        background: `linear-gradient(135deg, ${cardColor} 0%, #00F2FE 100%)`,
+                                                        color: '#0B0F19', border: 'none', borderRadius: '6px',
+                                                        padding: '7px 16px', fontFamily: 'Orbitron', fontSize: '11px',
+                                                        fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                                                        transition: 'transform 0.15s ease'
+                                                    }}
+                                                >
+                                                    🚀 NAVIGATE IN GOOGLE MAPS
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const styles = {
+            formCard: {
+                background: 'rgba(11, 15, 25, 0.9)',
+                border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px',
+                padding: '20px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+            },
+            inputLabel: {
+                display: 'block',
+                fontFamily: 'Orbitron',
+                fontSize: '10px',
+                color: '#9CA3AF',
+                marginBottom: '6px',
+                letterSpacing: '1px'
+            },
+            textInput: {
+                width: '100%',
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: '1px solid rgba(0, 242, 254, 0.3)',
+                borderRadius: '6px',
+                padding: '9px 12px',
+                color: '#E5E7EB',
+                fontSize: '12px',
+                outline: 'none'
+            },
+            findBtn: {
+                background: 'linear-gradient(135deg, #0284c7 0%, #00F2FE 100%)',
+                color: '#0B0F19',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '10px 22px',
+                fontFamily: 'Orbitron',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(0, 242, 254, 0.3)',
+                transition: 'all 0.2s ease'
+            },
+            splitLayout: {
+                display: 'flex',
+                gap: '24px',
+                alignItems: 'flex-start'
+            },
+            mapCard: {
+                background: 'rgba(11, 15, 25, 0.9)',
+                border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px',
+                padding: '16px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+            },
+            mapHeader: {
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px'
+            },
+            routeCard: {
+                border: '1px solid',
+                borderRadius: '12px',
+                padding: '16px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+            },
+            cardMetricsGrid: {
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '10px',
+                background: 'rgba(15, 23, 42, 0.7)',
+                padding: '10px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.05)'
+            },
+            metricLabel: {
+                fontSize: '9px',
+                fontFamily: 'Orbitron',
+                color: '#9CA3AF'
+            },
+            metricVal: {
+                fontSize: '13px',
+                fontFamily: 'Orbitron',
+                fontWeight: 'bold',
+                color: '#E5E7EB',
+                marginTop: '2px'
+            }
+        };
+
+        ReactDOM.createRoot(document.getElementById('app-root')).render(<RouteAdvisorApp />);
+    </script>
+    {% endraw %}
+</body>
+
+</html>

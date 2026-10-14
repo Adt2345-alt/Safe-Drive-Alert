@@ -19,6 +19,7 @@ class VideoGenerator:
         # Dashboard overlay assets (scenery seeds)
         self.scenery_stars = [(random.randint(0, self.width), random.randint(0, self.y_horizon)) for _ in range(30)]
         self.scenery_mountains = self._generate_mountains()
+        self.base_canvas = self._build_base_canvas()
         
     def _generate_mountains(self):
         # Set of vertices for stylized cyberpunk mountains on the horizon
@@ -33,35 +34,38 @@ class VideoGenerator:
             curr_x += w - random.randint(10, 40)
         return mountains
 
-    def generate_frame(self, fps_display=0.0):
-        # Create dark base canvas (Cyberpunk theme)
-        frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+    def _build_base_canvas(self):
+        canvas = np.zeros((self.height, self.width, 3), dtype=np.uint8)
         
-        # Sky: Dark Blue Gradient
-        for y in range(self.y_horizon):
-            ratio = y / self.y_horizon
-            color = (int(25 * (1 - ratio)), int(10 * (1 - ratio)), int(35 * (1 - ratio) + 15 * ratio))
-            frame[y, :] = color
-            
+        # Vectorized Sky Gradient
+        ratios_sky = np.linspace(0, 1, self.y_horizon).reshape(-1, 1)
+        sky_b = (25 * (1 - ratios_sky)).astype(np.uint8)
+        sky_g = (10 * (1 - ratios_sky)).astype(np.uint8)
+        sky_r = (35 * (1 - ratios_sky) + 15 * ratios_sky).astype(np.uint8)
+        sky_colors = np.dstack([sky_b, sky_g, sky_r])
+        canvas[0:self.y_horizon, :] = sky_colors
+
         # Draw Stars
         for sx, sy in self.scenery_stars:
             color = (random.randint(180, 255), random.randint(200, 255), random.randint(220, 255))
-            cv2.circle(frame, (sx, sy), 1, color, -1)
+            cv2.circle(canvas, (sx, sy), 1, color, -1)
             
         # Draw neon mountains
         for x1, y1, x2, y2, x3, y3 in self.scenery_mountains:
             pts = np.array([[x1, y1], [x2, y2], [x3, y3]], np.int32)
-            cv2.fillPoly(frame, [pts], (15, 10, 25))
-            cv2.polylines(frame, [pts], True, (50, 20, 75), 1)
+            cv2.fillPoly(canvas, [pts], (15, 10, 25))
+            cv2.polylines(canvas, [pts], True, (50, 20, 75), 1)
 
         # Horizon Line (Cyan neon glow)
-        cv2.line(frame, (0, self.y_horizon), (self.width, self.y_horizon), (0, 242, 254), 1)
+        cv2.line(canvas, (0, self.y_horizon), (self.width, self.y_horizon), (0, 242, 254), 1)
         
-        # Ground: Dark Grey Grid
-        for y in range(self.y_horizon, self.height):
-            ratio = (y - self.y_horizon) / (self.height - self.y_horizon)
-            color = (int(10 + 10 * ratio), int(15 + 10 * ratio), int(22 + 10 * ratio))
-            frame[y, :] = color
+        # Vectorized Ground Gradient
+        ratios_ground = np.linspace(0, 1, self.height - self.y_horizon).reshape(-1, 1)
+        g_b = (10 + 10 * ratios_ground).astype(np.uint8)
+        g_g = (15 + 10 * ratios_ground).astype(np.uint8)
+        g_r = (22 + 10 * ratios_ground).astype(np.uint8)
+        ground_colors = np.dstack([g_b, g_g, g_r])
+        canvas[self.y_horizon:self.height, :] = ground_colors
 
         # Draw road perspective trapezoid
         road_pts = np.array([
@@ -71,11 +75,14 @@ class VideoGenerator:
             [self.x_center - 260, self.y_bottom]
         ], np.int32)
         
-        # Fill road surface (darker asphalt)
-        cv2.fillPoly(frame, [road_pts], (24, 28, 38))
-        # Draw road shoulders (glowing cyan borders)
-        cv2.polylines(frame, [road_pts], False, (0, 242, 254), 2)
-        
+        cv2.fillPoly(canvas, [road_pts], (24, 28, 38))
+        cv2.polylines(canvas, [road_pts], False, (0, 242, 254), 2)
+        return canvas
+
+    def generate_frame(self, fps_display=0.0):
+        # Fast copy of pre-computed base canvas
+        frame = self.base_canvas.copy()
+
         # Draw scrolling lane markings based on vehicle distance
         self._draw_lane_markings(frame)
 

@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeDrive AI - Time-Series Analytics Dashboard</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- React 18 & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0B0F19;
+            --panel-bg: rgba(11, 15, 25, 0.9);
+            --cyan: #00F2FE;
+            --yellow: #eab308;
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --green: #10b981;
+            --blue: #3b82f6;
+            --text-main: #E5E7EB;
+            --text-dim: #9CA3AF;
+            --font-display: 'Orbitron', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Top Header Nav */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 24px;
+            border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+            background: rgba(11, 15, 25, 0.95);
+            z-index: 1000;
+            height: 56px;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        .header .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .header .brand-text {
+            font-family: var(--font-display);
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: var(--cyan);
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            text-transform: uppercase;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab-btn {
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            color: var(--text-dim);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-family: var(--font-display);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .tab-btn:hover {
+            border-color: var(--cyan);
+            color: var(--text-main);
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--cyan);
+            color: var(--cyan);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+            font-weight: bold;
+        }
+
+        #app-root {
+            margin-top: 68px;
+            padding: 24px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="brand-title" onclick="window.location.href='/'">
+            <span class="brand-text">SafeDrive AI</span>
+        </div>
+
+        <div class="nav-tabs">
+            <a href="/" class="tab-btn">Simulation Drive</a>
+            <a href="/map" class="tab-btn">HD Map View</a>
+            <a href="/work-orders" class="tab-btn">Work Orders</a>
+            <a href="/fleet" class="tab-btn">Multi-Vehicle Fleet</a>
+            <a href="/route-advisor" class="tab-btn">Route Advisor</a>
+            <a href="/analytics" class="tab-btn active">Analytics</a>
+            <a href="/predictive-hotspots" class="tab-btn">Predictive Hotspot Detection</a>
+        </div>
+
+        <div>
+            <a href="/logout" class="tab-btn" style="border-color: var(--red); color: var(--red);">LOGOUT</a>
+        </div>
+    </div>
+
+    <div id="app-root"></div>
+
+    {% raw %}
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function AnalyticsDashboard() {
+            const [region, setRegion] = useState('Bangalore');
+            const [days, setDays] = useState(30);
+
+            const [overview, setOverview] = useState({
+                total_defects: 0,
+                new_this_week: 0,
+                repaired_this_week: 0,
+                net_savings: 0
+            });
+
+            const [progress, setProgress] = useState({
+                total: 0,
+                repaired: 0,
+                pending: 0,
+                percent_complete: 0,
+                avg_repair_time_days: 12
+            });
+
+            const [worstRoads, setWorstRoads] = useState([]);
+
+            const trendCanvasRef = useRef(null);
+            const severityCanvasRef = useRef(null);
+            const typesCanvasRef = useRef(null);
+
+            const trendChartRef = useRef(null);
+            const severityChartRef = useRef(null);
+            const typesChartRef = useRef(null);
+
+            useEffect(() => {
+                fetchAnalyticsData();
+            }, [region, days]);
+
+            const fetchAnalyticsData = () => {
+                // 1. Overview KPIs
+                fetch(`/api/analytics/overview?region=${region}&days=${days}`)
+                    .then(r => r.json())
+                    .then(data => setOverview(data));
+
+                // 2. Repair Progress
+                fetch(`/api/analytics/repair-progress?region=${region}`)
+                    .then(r => r.json())
+                    .then(data => setProgress(data));
+
+                // 3. Top Worst Roads
+                fetch(`/api/analytics/by-road?region=${region}&limit=10`)
+                    .then(r => r.json())
+                    .then(data => setWorstRoads(data));
+
+                // 4. Trend Line Chart
+                fetch(`/api/analytics/trend?region=${region}&days=${days}`)
+                    .then(r => r.json())
+                    .then(data => renderTrendChart(data));
+
+                // 5. Severity Pie Chart
+                fetch(`/api/analytics/by-severity?region=${region}`)
+                    .then(r => r.json())
+                    .then(data => renderSeverityChart(data));
+
+                // 6. Defect Types Bar Chart
+                fetch(`/api/analytics/by-type?region=${region}`)
+                    .then(r => r.json())
+                    .then(data => renderTypesChart(data));
+            };
+
+            const renderTrendChart = (data) => {
+                if (!trendCanvasRef.current) return;
+                if (trendChartRef.current) trendChartRef.current.destroy();
+
+                const ctx = trendCanvasRef.current.getContext('2d');
+                trendChartRef.current = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.dates || [],
+                        datasets: [
+                            {
+                                label: 'Defects Detected',
+                                data: data.defects_added || [],
+                                borderColor: '#00F2FE',
+                                backgroundColor: 'rgba(0, 242, 254, 0.15)',
+                                fill: true,
+                                tension: 0.35
+                            },
+                            {
+                                label: 'Defects Repaired',
+                                data: data.defects_repaired || [],
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                                fill: true,
+                                tension: 0.35
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#E5E7EB', font: { family: 'Orbitron', size: 11 } } }
+                        },
+                        scales: {
+                            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9CA3AF' } },
+                            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9CA3AF' } }
+                        }
+                    }
+                });
+            };
+
+            const renderSeverityChart = (data) => {
+                if (!severityCanvasRef.current) return;
+                if (severityChartRef.current) severityChartRef.current.destroy();
+
+                const ctx = severityCanvasRef.current.getContext('2d');
+                severityChartRef.current = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Critical', 'High', 'Medium', 'Low', 'Repaired'],
+                        datasets: [{
+                            data: [
+                                data.Critical || 0,
+                                data.High || 0,
+                                data.Medium || 0,
+                                data.Low || 0,
+                                data.Repaired || 0
+                            ],
+                            backgroundColor: ['#ef4444', '#f59e0b', '#eab308', '#3b82f6', '#10b981'],
+                            borderWidth: 2,
+                            borderColor: '#0B0F19'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'right', labels: { color: '#E5E7EB', font: { family: 'Orbitron', size: 11 } } }
+                        }
+                    }
+                });
+            };
+
+            const renderTypesChart = (data) => {
+                if (!typesCanvasRef.current) return;
+                if (typesChartRef.current) typesChartRef.current.destroy();
+
+                const ctx = typesCanvasRef.current.getContext('2d');
+                typesChartRef.current = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Potholes', 'Cracks', 'Speedbumps'],
+                        datasets: [{
+                            label: 'Count',
+                            data: [data.pothole || 0, data.crack || 0, data.speedbump || 0],
+                            backgroundColor: ['#00F2FE', '#f59e0b', '#3b82f6'],
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#E5E7EB', font: { family: 'Orbitron', size: 11 } } },
+                            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9CA3AF' } }
+                        }
+                    }
+                });
+            };
+
+            const exportPDFReport = () => {
+                window.location.href = `/api/work-orders/export-pdf?region=${encodeURIComponent(region)}`;
+            };
+
+            const exportExcelData = () => {
+                window.location.href = `/api/export?format=csv`;
+            };
+
+            return (
+                <div>
+                    {/* TITLE BAR & EXPORT BUTTONS */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                        <div>
+                            <h1 style={{ fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '24px', letterSpacing: '1px' }}>
+                                TIME-SERIES ANALYTICS DASHBOARD
+                            </h1>
+                            <p style={{ color: '#9CA3AF', fontSize: '13px', marginTop: '4px' }}>
+                                Real-time Road Degradation, Severity Breakdown & Repair Telemetry
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button onClick={exportPDFReport} style={styles.exportPdfBtn}>
+                                📄 EXPORT PDF
+                            </button>
+                            <button onClick={exportExcelData} style={styles.exportExcelBtn}>
+                                📊 EXPORT EXCEL
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* FILTER BAR */}
+                    <div style={styles.filterBar}>
+                        <div style={styles.filterGroup}>
+                            <span style={styles.filterLabel}>REGION:</span>
+                            <select value={region} onChange={(e) => setRegion(e.target.value)} style={styles.selectInput}>
+                                <option value="Bangalore">Bangalore</option>
+                                <option value="San Francisco">San Francisco</option>
+                            </select>
+                        </div>
+                        <div style={styles.filterGroup}>
+                            <span style={styles.filterLabel}>TIME HORIZON:</span>
+                            <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} style={styles.selectInput}>
+                                <option value={7}>Last 7 Days</option>
+                                <option value={30}>Last 30 Days</option>
+                                <option value={90}>Last 90 Days</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* KPI CARDS ROW */}
+                    <div style={styles.kpiGrid}>
+                        <div style={styles.kpiCard}>
+                            <span style={styles.kpiLabel}>TOTAL DEFECTS</span>
+                            <span style={{ ...styles.kpiValue, color: '#00F2FE' }}>{overview.total_defects}</span>
+                        </div>
+                        <div style={styles.kpiCard}>
+                            <span style={styles.kpiLabel}>NEW THIS WEEK</span>
+                            <span style={{ ...styles.kpiValue, color: '#f59e0b' }}>+{overview.new_this_week}</span>
+                        </div>
+                        <div style={styles.kpiCard}>
+                            <span style={styles.kpiLabel}>REPAIRED THIS WEEK</span>
+                            <span style={{ ...styles.kpiValue, color: '#10b981' }}>{overview.repaired_this_week}</span>
+                        </div>
+                        <div style={styles.kpiCard}>
+                            <span style={styles.kpiLabel}>SAVINGS ($)</span>
+                            <span style={{ ...styles.kpiValue, color: '#00F2FE' }}>
+                                ${overview.net_savings > 1000000 ? (overview.net_savings / 1000000).toFixed(1) + 'M' : (overview.net_savings / 1000).toFixed(0) + 'K'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* CHART ROW 1: DETECTION TREND */}
+                    <div style={styles.chartCardFull}>
+                        <h3 style={styles.cardTitle}>DETECTION & REPAIR TREND (LAST {days} DAYS)</h3>
+                        <div style={{ height: '300px', width: '100%' }}>
+                            <canvas ref={trendCanvasRef} />
+                        </div>
+                    </div>
+
+                    {/* CHART ROW 2: TWO COLUMNS */}
+                    <div style={styles.twoColumnGrid}>
+                        <div style={styles.chartCard}>
+                            <h3 style={styles.cardTitle}>SEVERITY BREAKDOWN</h3>
+                            <div style={{ height: '260px', width: '100%' }}>
+                                <canvas ref={severityCanvasRef} />
+                            </div>
+                        </div>
+
+                        <div style={styles.chartCard}>
+                            <h3 style={styles.cardTitle}>DEFECT TYPES DISTRIBUTION</h3>
+                            <div style={{ height: '260px', width: '100%' }}>
+                                <canvas ref={typesCanvasRef} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* REPAIR PROGRESS & TOP WORST ROADS */}
+                    <div style={styles.twoColumnGrid}>
+                        {/* TOP 10 WORST ROADS TABLE */}
+                        <div style={styles.chartCard}>
+                            <h3 style={styles.cardTitle}>TOP 10 WORST ROADS</h3>
+                            <div style={{ overflowX: 'auto', marginTop: '12px' }}>
+                                <table style={styles.table}>
+                                    <thead>
+                                        <tr style={styles.thRow}>
+                                            <th style={styles.th}>RANK</th>
+                                            <th style={styles.th}>ROAD CORRIDOR</th>
+                                            <th style={styles.th}>DEFECTS</th>
+                                            <th style={styles.th}>EST. COST</th>
+                                            <th style={styles.th}>PRIORITY</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {worstRoads.map(r => (
+                                            <tr key={r.rank} style={styles.tr}>
+                                                <td style={{ ...styles.td, fontFamily: 'Orbitron', color: '#00F2FE', fontWeight: 'bold' }}>#{r.rank}</td>
+                                                <td style={styles.td}><b>{r.road}</b></td>
+                                                <td style={styles.td}>{r.defects}</td>
+                                                <td style={{ ...styles.td, color: '#10b981' }}>${r.cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                <td style={styles.td}>
+                                                    <span style={{
+                                                        background: r.priority === 'CRITICAL' ? '#ef4444' : (r.priority === 'HIGH' ? '#f59e0b' : '#3b82f6'),
+                                                        color: '#0B0F19', padding: '2px 6px', borderRadius: '4px',
+                                                        fontFamily: 'Orbitron', fontSize: '9px', fontWeight: 'bold'
+                                                    }}>
+                                                        {r.priority}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* REPAIR PROGRESS CARD */}
+                        <div style={styles.chartCard}>
+                            <h3 style={styles.cardTitle}>REPAIR PROGRESS & SLA TELEMETRY</h3>
+                            
+                            <div style={{ marginTop: '24px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                    <span style={{ fontFamily: 'Orbitron', fontSize: '13px', color: '#E5E7EB' }}>
+                                        {progress.repaired} of {progress.total} defects repaired ({progress.percent_complete}%)
+                                    </span>
+                                    <span style={{ fontFamily: 'Orbitron', fontSize: '13px', color: '#10b981', fontWeight: 'bold' }}>
+                                        {progress.percent_complete}%
+                                    </span>
+                                </div>
+
+                                {/* PROGRESS BAR */}
+                                <div style={styles.progressBarTrack}>
+                                    <div style={{ ...styles.progressBarFill, width: `${progress.percent_complete}%` }} />
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '32px' }}>
+                                    <div style={styles.statBox}>
+                                        <span style={styles.statBoxLabel}>PENDING DEFECTS</span>
+                                        <span style={{ ...styles.statBoxValue, color: '#f59e0b' }}>{progress.pending}</span>
+                                    </div>
+                                    <div style={styles.statBox}>
+                                        <span style={styles.statBoxLabel}>AVG REPAIR TIME</span>
+                                        <span style={{ ...styles.statBoxValue, color: '#00F2FE' }}>{progress.avg_repair_time_days} Days</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const styles = {
+            exportPdfBtn: {
+                background: 'linear-gradient(135deg, #0284c7 0%, #00F2FE 100%)', color: '#0B0F19', border: 'none',
+                borderRadius: '6px', padding: '10px 18px', fontFamily: 'Orbitron', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'
+            },
+            exportExcelBtn: {
+                background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981', color: '#10b981',
+                borderRadius: '6px', padding: '10px 18px', fontFamily: 'Orbitron', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'
+            },
+            filterBar: {
+                background: 'rgba(11, 15, 25, 0.9)', border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '10px', padding: '12px 20px', display: 'flex', gap: '20px', alignItems: 'center',
+                marginBottom: '24px', backdropFilter: 'blur(10px)'
+            },
+            filterGroup: { display: 'flex', alignItems: 'center', gap: '8px' },
+            filterLabel: { fontSize: '11px', fontFamily: 'Orbitron', color: '#9CA3AF' },
+            selectInput: {
+                background: '#0F172A', color: '#00F2FE', border: '1px solid #00F2FE',
+                borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontFamily: 'Orbitron', cursor: 'pointer', outline: 'none'
+            },
+            kpiGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '16px', marginBottom: '24px' },
+            kpiCard: {
+                background: 'rgba(11, 15, 25, 0.9)', border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px', padding: '18px 24px', display: 'flex', flexDirection: 'column'
+            },
+            kpiLabel: { fontSize: '11px', fontFamily: 'Orbitron', color: '#9CA3AF', letterSpacing: '1px' },
+            kpiValue: { fontSize: '26px', fontFamily: 'Orbitron', fontWeight: 'bold', marginTop: '6px' },
+            chartCardFull: {
+                background: 'rgba(11, 15, 25, 0.9)', border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px', padding: '20px', marginBottom: '24px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+            },
+            twoColumnGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' },
+            chartCard: {
+                background: 'rgba(11, 15, 25, 0.9)', border: '1px solid rgba(0, 242, 254, 0.25)',
+                borderRadius: '12px', padding: '20px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+            },
+            cardTitle: { fontFamily: 'Orbitron', color: '#00F2FE', fontSize: '13px', letterSpacing: '1px', marginBottom: '14px' },
+            table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11px' },
+            thRow: { background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid rgba(0, 242, 254, 0.3)' },
+            th: { padding: '10px 12px', fontFamily: 'Orbitron', color: '#00F2FE' },
+            tr: { borderBottom: '1px solid rgba(255, 255, 255, 0.05)' },
+            td: { padding: '8px 12px', color: '#E5E7EB' },
+            progressBarTrack: { width: '100%', height: '16px', background: '#0F172A', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(0,242,254,0.3)' },
+            progressBarFill: { height: '100%', background: 'linear-gradient(90deg, #0284c7 0%, #10b981 100%)', borderRadius: '8px', transition: 'width 0.5s ease' },
+            statBox: { background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(0, 242, 254, 0.2)', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' },
+            statBoxLabel: { fontSize: '10px', fontFamily: 'Orbitron', color: '#9CA3AF' },
+            statBoxValue: { fontSize: '22px', fontFamily: 'Orbitron', fontWeight: 'bold', marginTop: '4px' }
+        };
+
+        ReactDOM.createRoot(document.getElementById('app-root')).render(<AnalyticsDashboard />);
+    </script>
+    {% endraw %}
+
+</body>
+
+</html>

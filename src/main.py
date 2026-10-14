@@ -183,12 +183,34 @@ class SystemManager:
     def _annotate_frame(self, frame, tracked_objects):
         """
         Draws glowing bounding boxes, labels, distance, lane position, TTC, and lane corridor overlay.
+        Deduplicates overlapping visual boxes and adjusts text heights to prevent stacked labels.
         """
         # Render lane corridor overlay
         annotated = self.lane_detector.render_lane_overlay(frame)
         font = cv2.FONT_HERSHEY_SIMPLEX
         
-        for obj in tracked_objects:
+        # Deduplicate objects visually if boxes/centers overlap closely
+        display_objects = []
+        for obj in sorted(tracked_objects, key=lambda o: o.distance):
+            xmin1, ymin1, xmax1, ymax1 = obj.bbox
+            cx1, cy1 = (xmin1 + xmax1) // 2, (ymin1 + ymax1) // 2
+            
+            is_dup = False
+            for prev in display_objects:
+                xmin2, ymin2, xmax2, ymax2 = prev.bbox
+                cx2, cy2 = (xmin2 + xmax2) // 2, (ymin2 + ymax2) // 2
+                
+                # Check center proximity & box overlap
+                if abs(cx1 - cx2) < 30 and abs(cy1 - cy2) < 25:
+                    is_dup = True
+                    break
+                    
+            if not is_dup:
+                display_objects.append(obj)
+        
+        rendered_label_boxes = [] # list of (xmin, ymin_text, xmax, ymax_text)
+        
+        for obj in display_objects:
             xmin, ymin, xmax, ymax = obj.bbox
             
             # Color coding: Red for potholes, Yellow/Orange for speed bumps
@@ -209,9 +231,6 @@ class SystemManager:
                 pulse_r = int(12 + 4 * (time.time() * 8 % 3))
                 cv2.circle(annotated, (cx, cy), pulse_r, label_color, 1, cv2.LINE_AA)
                 
-                warn_msg = "IMPACT IMMINENT" if is_critical_ttc else "WARNING"
-                cv2.putText(annotated, warn_msg, (xmin, ymin - 25), font, 0.35, label_color, 1, cv2.LINE_AA)
-                
             # Draw bounding box
             cv2.rectangle(annotated, (xmin, ymin), (xmax, ymax), color, thickness)
             
@@ -224,19 +243,29 @@ class SystemManager:
             text_size = cv2.getTextSize(lbl_text, font, 0.35, 1)[0]
             text_w, text_h = text_size[0], text_size[1]
             
+            # Offset label vertically if colliding with previously rendered label
+            lbl_ymin = ymin - 8
+            lbl_top = lbl_ymin - text_h - 6
+            for r_top, r_bot, r_left, r_right in rendered_label_boxes:
+                if abs(xmin - r_left) < 150 and not (lbl_ymin < r_top or lbl_top > r_bot):
+                    lbl_top = r_top - text_h - 8
+                    lbl_ymin = lbl_top + text_h + 6
+                    
+            rendered_label_boxes.append((lbl_top, lbl_ymin, xmin, xmin + text_w + 6))
+            
             cv2.rectangle(annotated, 
-                          (xmin, ymin - text_h - 10), 
-                          (xmin + text_w + 6, ymin), 
+                          (xmin, lbl_top), 
+                          (xmin + text_w + 6, lbl_ymin), 
                           (15, 20, 30), 
                           -1) # Filled rectangle
             cv2.rectangle(annotated, 
-                          (xmin, ymin - text_h - 10), 
-                          (xmin + text_w + 6, ymin), 
+                          (xmin, lbl_top), 
+                          (xmin + text_w + 6, lbl_ymin), 
                           color, 
                           1)
                           
             # Print Label text
-            cv2.putText(annotated, lbl_text, (xmin + 3, ymin - 5), font, 0.35, (230, 230, 230), 1, cv2.LINE_AA)
+            cv2.putText(annotated, lbl_text, (xmin + 3, lbl_ymin - 4), font, 0.35, (230, 230, 230), 1, cv2.LINE_AA)
             
         return annotated
 

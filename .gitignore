@@ -19,6 +19,16 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/models/*
 !data/models/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+
+# Environment & Secrets
+.env
+.env*.local
+!.env.example
+
+# Temporary and Scratch files
+scratch/
 
 # System and IDE
 .idea/
@@ -31,3 +41,4 @@ data/models/*
 Thumbs.db
 desktop.ini
 .DS_Store
+
